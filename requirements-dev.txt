@@ -1,0 +1,21 @@
+# Включает базовые зависимости
+-r requirements.txt
+
+# Real-ESRGAN для увеличения разрешения
+# Установка: pip install git+https://github.com/xinntao/Real-ESRGAN.git
+basicsr>=1.4.2
+facexlib>=0.3.0
+gfpgan>=1.3.8
+
+# Дополнительные инструменты разработки
+jupyterlab==4.0.9
+matplotlib==3.8.2  # Для визуализации
+seaborn==0.13.0  # Для красивых графиков
+
+# Документация
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+
+# Профилирование и отладка
+memory-profiler==0.61.0
+line-profiler==4.1.1

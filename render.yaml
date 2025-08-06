@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ym-image-processor
+    runtime: docker
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO # Замените на ваш репозиторий
+    branch: main
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9
+    buildCommand: ""
+    startCommand: ""
+    healthCheckPath: /health
+    autoDeploy: true # Автоматический деплой при push в main

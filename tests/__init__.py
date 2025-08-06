@@ -1,0 +1,1 @@
+# Пакет тестов для Yandex Market Image Processor
