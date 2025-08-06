@@ -368,9 +368,8 @@ def process():
 
 def remove_background_fal(image):
     """
-    Удаление фона через Fal.ai API.
-    
-    Документация: https://fal.ai/models/fal-ai/birefnet
+    Удаление фона через вашу натренированную LoRA модель на Fal.ai
+    Используем FLUX Kontext для умного редактирования
     """
     try:
         # Конвертируем изображение в base64
@@ -384,30 +383,67 @@ def remove_background_fal(image):
             "Content-Type": "application/json"
         }
         
-        # Используем BiRefNet модель для удаления фона
-        # Это одна из лучших моделей для удаления фона
+        # Получаем путь к вашей LoRA модели из переменных окружения
+        lora_path = os.environ.get('LORA_PATH', 
+            'https://v3.fal.media/files/rabbit/McQtMDl9HQ2cKh0_E-CrO_adapter_model.safetensors')
+        
+        # Используем FLUX Kontext с вашей LoRA моделью
         data = {
-            "image_url": f"data:image/png;base64,{img_base64}"
+            "image_url": f"data:image/png;base64,{img_base64}",
+            "prompt": "remove background, place product on pure white background, keep shadows for realism, professional product photography",
+            "num_inference_steps": 30,
+            "guidance_scale": 2.5,
+            "output_format": "png",
+            "enable_safety_checker": False,
+            "loras": [
+                {
+                    "path": lora_path,
+                    "scale": 1.0
+                }
+            ],
+            "resolution_mode": "match_input"
         }
         
-        # Отправляем запрос
+        # Отправляем запрос на обработку
         response = requests.post(
-            "https://fal.run/fal-ai/birefnet",
+            "https://fal.run/fal-ai/flux-kontext-lora",
             headers=headers,
             json=data,
-            timeout=30
+            timeout=60
         )
         
         if response.status_code == 200:
             result = response.json()
             # Получаем URL обработанного изображения
-            if 'image' in result:
+            if 'images' in result and len(result['images']) > 0:
+                img_url = result['images'][0]['url']
                 # Загружаем результат
-                img_response = requests.get(result['image'])
+                img_response = requests.get(img_url)
                 result_image = Image.open(io.BytesIO(img_response.content))
                 return result_image
         
         print(f"API Error: {response.status_code} - {response.text}")
+        
+        # Fallback на обычное удаление фона если LoRA не сработала
+        print("Trying fallback to BiRefNet...")
+        data_fallback = {
+            "image_url": f"data:image/png;base64,{img_base64}"
+        }
+        
+        response = requests.post(
+            "https://fal.run/fal-ai/birefnet",
+            headers=headers,
+            json=data_fallback,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if 'image' in result:
+                img_response = requests.get(result['image'])
+                result_image = Image.open(io.BytesIO(img_response.content))
+                return result_image
+        
         return None
         
     except Exception as e:
