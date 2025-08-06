@@ -31,5 +31,5 @@ RUN mkdir -p /app/uploads /app/processed
 # Открытие порта
 EXPOSE 8080
 
-# Запуск упрощенной версии для тестирования
-CMD ["python3", "app_simple.py"]
+# Запуск API версии (не требует моделей в памяти)
+CMD ["python3", "app_api.py"]
