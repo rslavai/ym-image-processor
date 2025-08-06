@@ -23,7 +23,10 @@
       "Bash(FLASK_RUN_PORT=8080 python3 simple_flask_ui.py)",
       "Bash(pkill:*)",
       "Bash(kill:*)",
-      "Bash(./run_server.sh:*)"
+      "Bash(./run_server.sh:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }

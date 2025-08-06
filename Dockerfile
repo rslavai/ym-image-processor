@@ -31,5 +31,5 @@ RUN mkdir -p /app/uploads /app/processed
 # Открытие порта
 EXPOSE 8080
 
-# Запуск приложения через Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "120", "--workers", "1", "app:app"]
+# Запуск приложения через Gunicorn с оптимизацией для малой памяти
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "300", "--workers", "1", "--worker-class", "sync", "--max-requests", "50", "--max-requests-jitter", "10", "app:app"]
