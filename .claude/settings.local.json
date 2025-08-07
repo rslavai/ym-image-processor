@@ -26,7 +26,13 @@
       "Bash(./run_server.sh:*)",
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(./deploy_manual.sh)",
+      "Bash(ping:*)",
+      "Bash(nc:*)",
+      "Bash(ssh:*)"
     ],
     "deny": []
   }

@@ -1,0 +1,93 @@
+name: Alternative Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Deploy using direct SSH
+      env:
+        SERVER_HOST: 103.136.69.249
+        SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      run: |
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "$SSH_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        
+        # Add host to known hosts
+        ssh-keyscan -H 103.136.69.249 >> ~/.ssh/known_hosts 2>/dev/null
+        
+        # Deploy script
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@103.136.69.249 << 'ENDSSH'
+          set -e
+          echo "Starting deployment on server..."
+          
+          # Navigate to project directory
+          if [ ! -d "/opt/ym-image-processor" ]; then
+            echo "Cloning repository..."
+            cd /opt
+            git clone https://github.com/rslavai/ym-image-processor.git
+          fi
+          
+          cd /opt/ym-image-processor
+          
+          # Pull latest changes
+          echo "Pulling latest changes..."
+          git pull origin main || {
+            echo "Git pull failed, trying to reset..."
+            git fetch --all
+            git reset --hard origin/main
+          }
+          
+          # Ensure .env exists
+          if [ ! -f ".env" ]; then
+            echo "Creating .env file..."
+            cat > .env << 'EOF'
+        FAL_API_KEY=1b2d09e7-b561-4e66-b5df-c777ec28361f:c22376d251287771501f26cfdabf3ff5
+        LORA_PATH=https://v3.fal.media/files/rabbit/McQtMDl9HQ2cKh0_E-CrO_adapter_model.safetensors
+        OPENAI_API_KEY=y1__xDajc-RpdT-ARiuKyDznuMCNDLvZ7L9s40pcN2X-QL3l1X-suw
+        PORT=8080
+        EOF
+          fi
+          
+          # Build and restart Docker
+          echo "Building Docker image..."
+          docker build -t ym-processor . || exit 1
+          
+          echo "Restarting container..."
+          docker stop ym-processor 2>/dev/null || true
+          docker rm ym-processor 2>/dev/null || true
+          
+          docker run -d \
+            --name ym-processor \
+            --restart always \
+            -p 8080:8080 \
+            --env-file .env \
+            ym-processor
+          
+          # Verify deployment
+          sleep 5
+          if docker ps | grep -q ym-processor; then
+            echo "✅ Deployment successful!"
+            echo "Container status:"
+            docker ps | grep ym-processor
+            echo "Recent logs:"
+            docker logs --tail 10 ym-processor
+          else
+            echo "❌ Deployment failed!"
+            docker logs ym-processor
+            exit 1
+          fi
+        ENDSSH
+        
+        # Cleanup
+        rm -f ~/.ssh/deploy_key

@@ -15,17 +15,63 @@ jobs:
         host: ${{ secrets.SERVER_HOST }}
         username: root
         key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        timeout: 30s
+        command_timeout: 10m
         script: |
+          echo "Starting deployment..."
+          
+          # Check if directory exists
+          if [ ! -d "/opt/ym-image-processor" ]; then
+            echo "Cloning repository..."
+            cd /opt
+            git clone https://github.com/rslavai/ym-image-processor.git
+          fi
+          
           cd /opt/ym-image-processor
+          
+          # Pull latest changes
+          echo "Pulling latest changes..."
           git pull origin main
+          
+          # Create .env if not exists
+          if [ ! -f ".env" ]; then
+            echo "Creating .env file..."
+            cat > .env << 'EOF'
+          FAL_API_KEY=1b2d09e7-b561-4e66-b5df-c777ec28361f:c22376d251287771501f26cfdabf3ff5
+          LORA_PATH=https://v3.fal.media/files/rabbit/McQtMDl9HQ2cKh0_E-CrO_adapter_model.safetensors
+          OPENAI_API_KEY=y1__xDajc-RpdT-ARiuKyDznuMCNDLvZ7L9s40pcN2X-QL3l1X-suw
+          PORT=8080
+          EOF
+          fi
+          
+          # Build Docker image
+          echo "Building Docker image..."
           docker build -t ym-processor .
+          
+          # Stop and remove old container
+          echo "Stopping old container..."
           docker stop ym-processor || true
           docker rm ym-processor || true
+          
+          # Run new container
+          echo "Starting new container..."
           docker run -d \
             --name ym-processor \
             --restart always \
             -p 8080:8080 \
             --env-file .env \
             ym-processor
-          echo "✅ Deployment completed!"
-          docker ps | grep ym-processor
+          
+          # Wait for container to start
+          sleep 5
+          
+          # Check if container is running
+          if docker ps | grep -q ym-processor; then
+            echo "✅ Deployment completed successfully!"
+            docker logs --tail 20 ym-processor
+          else
+            echo "❌ Container failed to start"
+            docker logs ym-processor
+            exit 1
+          fi
