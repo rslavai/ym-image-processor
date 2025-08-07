@@ -20,220 +20,357 @@ HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>YM Image Processor - API Version</title>
+    <title>YM Image Processor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Syne', -apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif;
+            background: #ffffff;
             min-height: 100vh;
-            padding: 20px;
+            padding: 60px 20px;
+            position: relative;
         }
+        
+        /* Subtle background pattern */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(120, 120, 120, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(120, 120, 120, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(120, 120, 120, 0.02) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        
         .container { 
-            max-width: 1200px; 
+            max-width: 920px; 
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Glassmorphism card */
+        .glass-card {
+            background: rgba(248, 248, 248, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.08),
+                inset 0 2px 1px rgba(255, 255, 255, 0.6);
+            padding: 48px;
+            position: relative;
             overflow: hidden;
         }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        
+        /* Glass shimmer effect */
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                transparent
+            );
+            transition: left 0.5s;
         }
+        
+        .glass-card:hover::before {
+            left: 100%;
+        }
+        
         h1 { 
-            font-size: 2em;
-            margin-bottom: 10px;
-        }
-        .subtitle {
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        .api-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            padding: 5px 15px;
-            border-radius: 20px;
-            margin-top: 10px;
-            font-size: 0.9em;
-        }
-        .content {
-            padding: 30px;
-        }
-        .upload-area {
-            border: 3px dashed #e0e0e0;
-            border-radius: 15px;
-            padding: 40px;
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #1d1d1f;
             text-align: center;
-            background: #f8f9fa;
-            transition: all 0.3s;
+            margin-bottom: 48px;
+            letter-spacing: -0.02em;
         }
-        .upload-area:hover {
-            border-color: #667eea;
-            background: #f0f4ff;
+        
+        .upload-zone {
+            background: rgba(255, 255, 255, 0.5);
+            border: 2px dashed rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
         }
+        
+        .upload-zone:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .upload-zone.dragover {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: #1d1d1f;
+            transform: scale(1.02);
+        }
+        
         .file-input-wrapper {
             position: relative;
             overflow: hidden;
             display: inline-block;
         }
+        
         .file-input-wrapper input[type=file] {
             position: absolute;
             left: -9999px;
         }
+        
         .file-input-label {
             display: inline-block;
-            padding: 12px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 30px;
+            padding: 0;
+            background: none;
+            color: #1d1d1f;
+            font-size: 1rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: transform 0.3s;
-            font-weight: 600;
+            transition: opacity 0.3s;
         }
+        
         .file-input-label:hover {
-            transform: translateY(-2px);
+            opacity: 0.7;
         }
+        
+        .upload-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 20px;
+            opacity: 0.3;
+        }
+        
+        .upload-text {
+            color: #86868b;
+            font-size: 0.95rem;
+            margin-top: 12px;
+        }
+        
         button { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 40px;
+            background: #1d1d1f;
+            color: #ffffff;
+            padding: 14px 36px;
             border: none;
             cursor: pointer;
-            border-radius: 30px;
-            font-size: 1.1em;
-            font-weight: 600;
-            margin-top: 20px;
-            transition: transform 0.3s, box-shadow 0.3s;
+            border-radius: 100px;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-top: 32px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: -0.01em;
         }
+        
         button:hover { 
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            background: #000000;
+            transform: scale(1.05);
         }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
         button:disabled {
-            opacity: 0.5;
+            opacity: 0.3;
             cursor: not-allowed;
+            transform: none;
         }
+        
         .loading {
             display: none;
-            margin: 30px 0;
+            margin: 48px 0;
         }
+        
         .loading.active {
             display: block;
         }
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
+        
+        /* Linear progress bar instead of spinner */
+        .progress-bar {
+            width: 200px;
+            height: 2px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 2px;
             margin: 0 auto;
+            overflow: hidden;
+            position: relative;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        
+        .progress-bar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: #1d1d1f;
+            animation: progress 1.5s ease-in-out infinite;
         }
+        
+        @keyframes progress {
+            0% { left: -100%; }
+            50% { left: 100%; }
+            100% { left: 100%; }
+        }
+        
+        .loading-text {
+            color: #86868b;
+            font-size: 0.9rem;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
         .result-area {
             display: none;
-            margin-top: 40px;
+            margin-top: 60px;
         }
+        
         .result-area.active {
             display: block;
+            animation: fadeIn 0.5s ease-in-out;
         }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
         .images-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-top: 30px;
+            gap: 40px;
+            margin-top: 40px;
         }
+        
         @media (max-width: 768px) {
             .images-grid {
                 grid-template-columns: 1fr;
             }
+            
+            .glass-card {
+                padding: 32px 24px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
         }
+        
         .image-box {
             text-align: center;
         }
+        
         .image-box img {
             max-width: 100%;
             max-height: 400px;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            background: white;
+            padding: 8px;
         }
+        
+        .image-label {
+            font-size: 0.85rem;
+            color: #86868b;
+            margin-bottom: 16px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
         .download-btn {
-            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
-            display: inline-block;
-            margin-top: 15px;
-            padding: 12px 30px;
+            background: #1d1d1f;
             color: white;
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 28px;
             text-decoration: none;
-            border-radius: 30px;
-            font-weight: 600;
+            border-radius: 100px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        
+        .download-btn:hover {
+            background: #000000;
+            transform: scale(1.05);
+        }
+        
         .status {
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 10px;
+            padding: 16px 24px;
+            margin: 32px 0;
+            border-radius: 12px;
             font-weight: 500;
             text-align: center;
+            font-size: 0.95rem;
+            backdrop-filter: blur(10px);
         }
+        
         .success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: rgba(52, 199, 89, 0.1);
+            color: #00733B;
+            border: 1px solid rgba(52, 199, 89, 0.2);
         }
+        
         .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: rgba(255, 59, 48, 0.1);
+            color: #D70015;
+            border: 1px solid rgba(255, 59, 48, 0.2);
         }
+        
         .warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-        h4 {
-            margin-bottom: 15px;
-            color: #333;
+            background: rgba(255, 204, 0, 0.1);
+            color: #A68B00;
+            border: 1px solid rgba(255, 204, 0, 0.2);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🛍️ YM Image Processor</h1>
-            <div class="subtitle">Профессиональное удаление фона для Яндекс Маркет</div>
-            <div class="api-badge">⚡ Powered by Fal.ai + Custom LoRA Model</div>
-        </div>
-        
-        <div class="content">
+        <div class="glass-card">
+            <h1>YM Image Processor</h1>
+            
             {% if not api_configured %}
             <div class="status warning">
-                ⚠️ API ключ не настроен. Добавьте FAL_API_KEY в переменные окружения Render.
+                API ключ не настроен. Добавьте FAL_API_KEY в переменные окружения.
             </div>
             {% endif %}
             
             <form method="POST" enctype="multipart/form-data" id="uploadForm">
-                <div class="upload-area">
-                    <p style="font-size: 3em; margin-bottom: 20px;">📸</p>
+                <div class="upload-zone" id="uploadZone">
+                    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
                     <div class="file-input-wrapper">
                         <input type="file" name="file" id="file" accept="image/*" required>
                         <label for="file" class="file-input-label">Выберите изображение</label>
                     </div>
-                    <p style="margin-top: 20px; color: #666;">или перетащите файл сюда</p>
-                    <button type="submit" id="processBtn">🚀 Удалить фон</button>
+                    <p class="upload-text">или перетащите файл сюда</p>
                 </div>
+                <button type="submit" id="processBtn">Обработать</button>
             </form>
             
             <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p style="margin-top: 20px; text-align: center; color: #667eea;">
-                    Обрабатываем изображение через AI...
-                </p>
+                <div class="progress-bar"></div>
+                <p class="loading-text">Обработка изображения...</p>
             </div>
             
             {% if status %}
@@ -243,18 +380,17 @@ HTML_TEMPLATE = '''
             <div class="result-area {% if output_image %}active{% endif %}">
                 <div class="images-grid">
                     <div class="image-box">
-                        <h4>Исходное изображение</h4>
+                        <p class="image-label">Оригинал</p>
                         {% if input_image %}
                         <img src="data:image/png;base64,{{ input_image }}" alt="Original">
                         {% endif %}
                     </div>
                     <div class="image-box">
-                        <h4>Результат</h4>
+                        <p class="image-label">Результат</p>
                         {% if output_image %}
                         <img src="data:image/png;base64,{{ output_image }}" alt="Result">
-                        <br>
                         <a href="data:image/png;base64,{{ output_image }}" download="result.png" class="download-btn">
-                            💾 Скачать PNG
+                            Скачать PNG
                         </a>
                         {% endif %}
                     </div>
@@ -272,26 +408,27 @@ HTML_TEMPLATE = '''
         document.getElementById('file').addEventListener('change', function(e) {
             const fileName = e.target.files[0]?.name;
             if (fileName) {
-                document.querySelector('.file-input-label').textContent = '📎 ' + fileName;
+                document.querySelector('.file-input-label').textContent = fileName;
             }
         });
         
         // Drag and drop
-        const uploadArea = document.querySelector('.upload-area');
-        uploadArea.addEventListener('dragover', (e) => {
+        const uploadZone = document.getElementById('uploadZone');
+        uploadZone.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadArea.style.borderColor = '#667eea';
+            uploadZone.classList.add('dragover');
         });
-        uploadArea.addEventListener('dragleave', (e) => {
+        uploadZone.addEventListener('dragleave', (e) => {
             e.preventDefault();
-            uploadArea.style.borderColor = '#e0e0e0';
+            uploadZone.classList.remove('dragover');
         });
-        uploadArea.addEventListener('drop', (e) => {
+        uploadZone.addEventListener('drop', (e) => {
             e.preventDefault();
+            uploadZone.classList.remove('dragover');
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 document.getElementById('file').files = files;
-                document.querySelector('.file-input-label').textContent = '📎 ' + files[0].name;
+                document.querySelector('.file-input-label').textContent = files[0].name;
             }
         });
     </script>
@@ -335,7 +472,7 @@ def process():
             return render_template_string(HTML_TEMPLATE,
                                          input_image=input_base64,
                                          output_image=input_base64,
-                                         status='⚠️ API ключ не настроен. Показан оригинал.',
+                                         status='API ключ не настроен. Показан оригинал.',
                                          status_class='warning',
                                          api_configured=False)
         
@@ -351,13 +488,13 @@ def process():
             return render_template_string(HTML_TEMPLATE,
                                          input_image=input_base64,
                                          output_image=output_base64,
-                                         status='✅ Фон успешно удален!',
+                                         status='Фон успешно удален',
                                          status_class='success',
                                          api_configured=True)
         else:
             return render_template_string(HTML_TEMPLATE,
                                          input_image=input_base64,
-                                         status='❌ Ошибка при обработке через API',
+                                         status='Ошибка при обработке через API',
                                          status_class='error',
                                          api_configured=True)
         
@@ -461,6 +598,6 @@ def health():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    print(f"🚀 Starting API-based server on port {port}")
-    print(f"📡 Fal.ai API configured: {bool(FAL_API_KEY)}")
+    print(f"Starting API-based server on port {port}")
+    print(f"Fal.ai API configured: {bool(FAL_API_KEY)}")
     app.run(host='0.0.0.0', port=port, debug=False)
