@@ -207,7 +207,7 @@ HTML_TEMPLATE = '''
         <div class="header">
             <h1>🛍️ YM Image Processor</h1>
             <div class="subtitle">Профессиональное удаление фона для Яндекс Маркет</div>
-            <div class="api-badge">⚡ Powered by Fal.ai</div>
+            <div class="api-badge">⚡ Powered by Fal.ai + Custom LoRA Model</div>
         </div>
         
         <div class="content">
