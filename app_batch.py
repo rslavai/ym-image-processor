@@ -686,9 +686,51 @@ def index():
 @app.route('/single')
 def single_mode():
     """Redirect to single processing app"""
+    # For now, show message that single mode is integrated
     return '''
-    <script>window.location.href = "http://localhost:8080";</script>
-    <p>Redirecting to single processing mode...</p>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Single Mode</title>
+        <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            body { 
+                font-family: 'Syne', sans-serif;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                margin: 0;
+                background: #f5f5f7;
+            }
+            .message {
+                text-align: center;
+                padding: 40px;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            h2 { color: #1d1d1f; margin-bottom: 16px; }
+            p { color: #86868b; margin-bottom: 24px; }
+            a {
+                display: inline-block;
+                padding: 12px 32px;
+                background: #007aff;
+                color: white;
+                text-decoration: none;
+                border-radius: 100px;
+                font-weight: 500;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="message">
+            <h2>Одиночная обработка</h2>
+            <p>Для обработки одного изображения используйте пакетный режим<br>и загрузите только один файл</p>
+            <a href="/">Перейти к обработке</a>
+        </div>
+    </body>
+    </html>
     '''
 
 @app.route('/process_batch', methods=['POST'])
@@ -889,8 +931,8 @@ if __name__ == '__main__':
     os.makedirs('processed', exist_ok=True)
     os.makedirs('database', exist_ok=True)
     
-    port = int(os.environ.get('PORT', 8081))
+    port = int(os.environ.get('PORT', 8080))
     print(f"Starting Batch Processor on port {port}")
     print(f"OpenAI API configured: {bool(os.environ.get('OPENAI_API_KEY'))}")
     print(f"Fal.ai API configured: {bool(os.environ.get('FAL_API_KEY'))}")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)

@@ -25,11 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копирование кода приложения
 COPY . .
 
-# Создание директории для загрузок
-RUN mkdir -p /app/uploads /app/processed
+# Создание директории для загрузок и базы данных
+RUN mkdir -p /app/uploads /app/processed /app/database
 
 # Открытие порта
 EXPOSE 8080
 
-# Запуск API версии (не требует моделей в памяти)
-CMD ["python3", "app_api.py"]
+# Запуск batch версии с полным функционалом
+CMD ["python3", "app_batch.py"]
