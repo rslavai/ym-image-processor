@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  ym-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: ym-processor
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - FAL_API_KEY=${FAL_API_KEY}
+      - LORA_PATH=${LORA_PATH}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./database:/app/database
+      - ./processed:/app/processed
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - ym-network
+
+  # Optional: Nginx for better performance and SSL
+  nginx:
+    image: nginx:alpine
+    container_name: ym-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./processed:/usr/share/nginx/html/static:ro
+    depends_on:
+      - ym-processor
+    networks:
+      - ym-network
+
+networks:
+  ym-network:
+    driver: bridge
+
+volumes:
+  database:
+  processed:
+  uploads:
+  logs:
