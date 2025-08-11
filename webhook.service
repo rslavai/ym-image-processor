@@ -1,0 +1,17 @@
+[Unit]
+Description=GitHub Webhook Server for YM Image Processor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ym-image-processor
+Environment="WEBHOOK_SECRET=ym-deploy-secret-2024"
+ExecStart=/usr/bin/python3 /opt/ym-image-processor/webhook_server.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/webhook_server.log
+StandardError=append:/var/log/webhook_server.error.log
+
+[Install]
+WantedBy=multi-user.target
