@@ -156,7 +156,17 @@ class SmartPositioning:
         
         # Paste product onto canvas
         canvas_copy = canvas.copy()
-        canvas_copy.paste(product_resized, (x, y), product_resized)
+        
+        # Use alpha channel as mask if available, otherwise no mask
+        if product_resized.mode == 'RGBA':
+            try:
+                canvas_copy.paste(product_resized, (x, y), product_resized)
+            except ValueError:
+                # Fallback: paste without alpha mask
+                rgb_product = product_resized.convert('RGB')
+                canvas_copy.paste(rgb_product, (x, y))
+        else:
+            canvas_copy.paste(product_resized, (x, y))
         
         return canvas_copy
     
