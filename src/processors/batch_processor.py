@@ -173,10 +173,18 @@ class BatchProcessor:
         filename = file.filename
         
         try:
+            # Read file content first to avoid stream closing issues
+            file_content = file.stream.read()
+            file.stream.seek(0)  # Reset stream position
+            
             # Save original
             original_path = batch_dir / "originals" / filename
-            image = Image.open(file.stream).convert('RGBA')
-            image.save(original_path)
+            os.makedirs(original_path.parent, exist_ok=True)
+            with open(original_path, 'wb') as f:
+                f.write(file_content)
+            
+            # Load image from content
+            image = Image.open(io.BytesIO(file_content)).convert('RGBA')
             
             # Step 1: GPT Analysis
             gpt_result = self.gpt_analyzer.analyze_image(image)
