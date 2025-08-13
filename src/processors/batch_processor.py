@@ -251,8 +251,17 @@ class BatchProcessor:
             # Print detailed error for debugging
             import traceback
             error_msg = f"Error processing {filename}: {str(e)}"
-            print(f"ERROR: {error_msg}")
-            print(f"TRACEBACK: {traceback.format_exc()}")
+            print(f"ERROR: {error_msg}", flush=True)
+            print(f"TRACEBACK: {traceback.format_exc()}", flush=True)
+            
+            # Also write to file for debugging
+            try:
+                with open('/app/debug.log', 'a') as f:
+                    f.write(f"ERROR: {error_msg}\n")
+                    f.write(f"TRACEBACK: {traceback.format_exc()}\n")
+                    f.write("="*50 + "\n")
+            except:
+                pass
             
             # Save error to database
             self._save_to_database({
