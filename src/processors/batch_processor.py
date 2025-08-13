@@ -248,6 +248,12 @@ class BatchProcessor:
                 raise Exception("Failed to remove background")
                 
         except Exception as e:
+            # Print detailed error for debugging
+            import traceback
+            error_msg = f"Error processing {filename}: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            print(f"TRACEBACK: {traceback.format_exc()}")
+            
             # Save error to database
             self._save_to_database({
                 'batch_id': self.current_batch_id,
