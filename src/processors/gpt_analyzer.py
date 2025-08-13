@@ -92,7 +92,7 @@ Rules:
             combined_prompt = f"{self.system_prompt}\n\nAnalyze this product image and return the structured JSON response."
             
             payload = {
-                "model": "gpt-4.1",
+                "model": "gpt-5",
                 "input": [
                     {
                         "role": "user",
@@ -103,11 +103,18 @@ Rules:
                             },
                             {
                                 "type": "input_image",
-                                "image_url": f"data:image/png;base64,{img_base64}"
+                                "image_url": f"data:image/png;base64,{img_base64}",
+                                "detail": "low"
                             }
                         ]
                     }
-                ]
+                ],
+                "reasoning": {
+                    "effort": "minimal"
+                },
+                "text": {
+                    "verbosity": "low"
+                }
             }
             
             # Make the API call
