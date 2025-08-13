@@ -212,7 +212,20 @@ class BatchProcessor:
                 
                 # Save final version
                 final_path = batch_dir / "final" / filename
-                final_image.save(final_path)
+                
+                # Convert RGBA to RGB for JPEG, or save as PNG
+                if final_path.suffix.lower() in ['.jpg', '.jpeg']:
+                    # Convert to RGB for JPEG
+                    if final_image.mode == 'RGBA':
+                        rgb_image = Image.new('RGB', final_image.size, (255, 255, 255))
+                        rgb_image.paste(final_image, mask=final_image.split()[-1] if final_image.mode == 'RGBA' else None)
+                        rgb_image.save(final_path, 'JPEG')
+                    else:
+                        final_image.save(final_path)
+                else:
+                    # Save as PNG to preserve transparency
+                    final_path = final_path.with_suffix('.png')
+                    final_image.save(final_path, 'PNG')
                 
                 # Calculate processing time
                 processing_time = time.time() - start_time
