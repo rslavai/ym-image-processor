@@ -92,7 +92,7 @@ Rules:
             combined_prompt = f"{self.system_prompt}\n\nAnalyze this product image and return the structured JSON response."
             
             payload = {
-                "model": "gpt-5",
+                "model": "gpt-4o-mini",
                 "input": [
                     {
                         "role": "user",
@@ -108,13 +108,7 @@ Rules:
                             }
                         ]
                     }
-                ],
-                "reasoning": {
-                    "effort": "minimal"
-                },
-                "text": {
-                    "verbosity": "low"
-                }
+                ]
             }
             
             # Make the API call
@@ -127,8 +121,18 @@ Rules:
             
             if response.status_code == 200:
                 result = response.json()
-                # New Responses API returns output_text instead of choices
-                content = result.get('output_text', '')
+                # New Responses API returns output in different format
+                content = ""
+                if 'output' in result and len(result['output']) > 0:
+                    output_item = result['output'][0]
+                    if 'content' in output_item and len(output_item['content']) > 0:
+                        content_item = output_item['content'][0]
+                        if content_item.get('type') == 'output_text':
+                            content = content_item.get('text', '')
+                
+                if not content:
+                    # Fallback - try old format
+                    content = result.get('output_text', '')
                 
                 # Extract JSON from response
                 # GPT might wrap it in ```json ... ``` markers
