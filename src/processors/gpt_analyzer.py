@@ -89,7 +89,7 @@ Rules:
             
             # Prepare the request
             payload = {
-                "model": "gpt-4o",
+                "model": "gpt-4o-mini",
                 "messages": [
                     {
                         "role": "system",
@@ -157,10 +157,18 @@ Rules:
                 }
                 
             else:
-                print(f"GPT-4 Vision API error: {response.status_code} - {response.text}")
+                error_detail = ""
+                if response.status_code == 429:
+                    error_detail = " (Rate limit exceeded or insufficient quota)"
+                elif response.status_code == 401:
+                    error_detail = " (Invalid API key)"
+                elif response.status_code == 404:
+                    error_detail = " (Model not found)"
+                    
+                print(f"GPT-4 Vision API error: {response.status_code}{error_detail} - {response.text}")
                 return {
                     'success': False,
-                    'error': f"API error: {response.status_code}",
+                    'error': f"API error: {response.status_code}{error_detail}",
                     'fallback': self._get_fallback_analysis(image)
                 }
                 
