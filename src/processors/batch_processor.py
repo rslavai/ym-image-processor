@@ -177,17 +177,15 @@ class BatchProcessor:
             original_path = batch_dir / "originals" / filename
             os.makedirs(original_path.parent, exist_ok=True)
             
-            # Load image directly from stream
+            # Load image directly from stream  
             image = Image.open(file.stream)
             
-            # Always save as PNG to avoid format conversion issues
-            original_path = original_path.with_suffix('.png')
+            # Save image as-is (keep original format)
+            image.save(original_path)
             
-            # Convert to RGBA and save as PNG
+            # Convert to RGBA for processing only  
             if image.mode != 'RGBA':
                 image = image.convert('RGBA')
-            
-            image.save(original_path, 'PNG')
             
             # Step 1: GPT Analysis
             gpt_result = self.gpt_analyzer.analyze_image(image)
