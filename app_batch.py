@@ -1279,6 +1279,9 @@ SINGLE_TEMPLATE = '''
                 
                 <div style="text-align: center; margin-top: 32px;">
                     <div id="promptUsed" style="background: rgba(0,0,0,0.05); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 0.9rem; text-align: left; display: none;">
+                        <div style="margin-bottom: 8px;">
+                            <strong>Версия LoRA:</strong> <span id="loraVersionText" style="background: #34c759; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;"></span>
+                        </div>
                         <strong>Промпт, отправленный в LoRA:</strong><br>
                         <span id="promptText"></span>
                     </div>
@@ -1438,10 +1441,24 @@ SINGLE_TEMPLATE = '''
                     document.getElementById('analysis-data').style.display = 'block';
                 }
                 
-                // Show used prompt
+                // Show used prompt and LoRA version
                 if (data.prompt_used) {
                     document.getElementById('promptUsed').style.display = 'block';
                     document.getElementById('promptText').textContent = data.prompt_used;
+                    
+                    // Show LoRA version
+                    if (data.lora_version) {
+                        const versionText = data.lora_version.toUpperCase();
+                        const versionElement = document.getElementById('loraVersionText');
+                        versionElement.textContent = versionText;
+                        
+                        // Different colors for different versions
+                        if (data.lora_version === 'v2') {
+                            versionElement.style.background = '#ff6b35';
+                        } else {
+                            versionElement.style.background = '#34c759';
+                        }
+                    }
                 }
             }
             
@@ -1676,7 +1693,7 @@ def process_single():
         # Start processing in background thread
         thread = threading.Thread(
             target=process_single_background,
-            args=(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text)
+            args=(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text, lora_version)
         )
         thread.start()
         
@@ -1706,7 +1723,7 @@ def get_single_image(processing_id, step):
     
     return "Image not found", 404
 
-def process_single_background(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text):
+def process_single_background(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text, lora_version='v1'):
     """Background processing for single image"""
     try:
         # Create processing directory
@@ -1739,12 +1756,13 @@ def process_single_background(file_data, processing_id, enhance, debug, custom_p
             prompt_to_use = batch_processor.gpt_analyzer.create_lora_prompt(analysis)
         
         single_progress_data[processing_id]['prompt_used'] = prompt_to_use
+        single_progress_data[processing_id]['lora_version'] = lora_version
         
         # Step 3: Background removal
         single_progress_data[processing_id]['current_step'] = 'background'
         single_progress_data[processing_id]['background_processing'] = True
         
-        no_bg_image = batch_processor._remove_background_fal(image, prompt_to_use)
+        no_bg_image = batch_processor._remove_background_fal_v2(image, prompt_to_use, lora_version)
         if no_bg_image:
             no_bg_path = process_dir / "background.png"
             no_bg_image.save(no_bg_path, 'PNG')

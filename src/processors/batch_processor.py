@@ -415,6 +415,97 @@ class BatchProcessor:
                 'processing_time': time.time() - start_time
             }
     
+    def _remove_background_fal_v2(self, image: Image.Image, prompt: str, lora_version: str = 'v1') -> Optional[Image.Image]:
+        """
+        Remove background using Fal.ai API with LoRA model (supports V1/V2)
+        
+        Args:
+            image: Input image
+            prompt: Optimized prompt from GPT
+            lora_version: LoRA version ('v1' or 'v2')
+            
+        Returns:
+            Image with removed background or None if failed
+        """
+        if not self.fal_api_key:
+            print("FAL_API_KEY not configured")
+            return None
+        
+        try:
+            # Convert image to base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            # Prepare API request
+            headers = {
+                "Authorization": f"Key {self.fal_api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Configure settings based on LoRA version
+            if lora_version == 'v2':
+                # LoRA V2 settings from config
+                lora_path = "https://v3.fal.media/files/zebra/KoeQj8N4bU6OGnPT2VABy_adapter_model.safetensors"
+                inference_steps = 1000
+                guidance_scale = 0.0001  # learning_rate from config
+                # Use improved prompt from V2 config if no custom prompt
+                if not prompt or prompt.strip() == "":
+                    prompt = "Isolate the main product from the original image. Remove all text, graphics, watermarks, and extra objects. Replace the background with a pure white background. Keep product colors, proportions, and details. Add a soft realistic shadow for a natural catalog look."
+            else:
+                # LoRA V1 (original) settings
+                lora_path = self.lora_path
+                inference_steps = 30
+                guidance_scale = 2.5
+            
+            # Use FLUX Kontext with LoRA
+            data = {
+                "image_url": f"data:image/png;base64,{img_base64}",
+                "prompt": prompt,
+                "num_inference_steps": inference_steps,
+                "guidance_scale": guidance_scale,
+                "output_format": "png",
+                "enable_safety_checker": False,
+                "loras": [
+                    {
+                        "path": lora_path,
+                        "scale": 1.0
+                    }
+                ],
+                "resolution_mode": "match_input"
+            }
+            
+            # Make API call
+            response = requests.post(
+                "https://fal.run/fal-ai/flux-kontext-lora",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'images' in result and len(result['images']) > 0:
+                    img_url = result['images'][0]['url']
+                    img_response = requests.get(img_url)
+                    result_image = Image.open(io.BytesIO(img_response.content))
+                    return result_image
+            else:
+                print(f"LoRA API error: {response.status_code} - {response.text}")
+            
+            # Fallback to BiRefNet if LoRA fails
+            print(f"LoRA failed, trying BiRefNet fallback")
+            return self._remove_background_birefnet(image)
+            
+        except Exception as e:
+            print(f"Error in LoRA background removal: {e}")
+            # Fallback to BiRefNet
+            try:
+                return self._remove_background_birefnet(image)
+            except Exception as fallback_error:
+                print(f"BiRefNet fallback also failed: {fallback_error}")
+                return None
+
     def _remove_background_fal(self, image: Image.Image, prompt: str) -> Optional[Image.Image]:
         """
         Remove background using Fal.ai API with LoRA model
