@@ -8,6 +8,7 @@ import io
 import json
 import time
 import base64
+from pathlib import Path
 from flask import Flask, render_template_string, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from PIL import Image
