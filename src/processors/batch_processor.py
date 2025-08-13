@@ -179,7 +179,20 @@ class BatchProcessor:
             
             # Load image directly from stream
             image = Image.open(file.stream).convert('RGBA')
-            image.save(original_path)
+            
+            # Save with appropriate format
+            if original_path.suffix.lower() in ['.jpg', '.jpeg']:
+                # Convert RGBA to RGB for JPEG
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'RGBA':
+                    rgb_image.paste(image, mask=image.split()[-1])
+                else:
+                    rgb_image = image.convert('RGB')
+                rgb_image.save(original_path, 'JPEG')
+            else:
+                # Save as PNG to preserve transparency
+                original_path = original_path.with_suffix('.png')
+                image.save(original_path, 'PNG')
             
             # Step 1: GPT Analysis
             gpt_result = self.gpt_analyzer.analyze_image(image)
