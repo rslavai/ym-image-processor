@@ -1210,7 +1210,14 @@ SINGLE_TEMPLATE = '''
                     </div>
                     
                     <div class="option-group">
-                        <h3>Промпт для LoRA</h3>
+                        <h3>Настройки LoRA</h3>
+                        <div class="option-item">
+                            <label for="loraVersion" style="margin-right: 12px; color: #1d1d1f;">Версия LoRA:</label>
+                            <select id="loraVersion" name="loraVersion" style="padding: 6px 12px; border: 1px solid #e5e5e5; border-radius: 6px; background: white;">
+                                <option value="v1">V1 (Стандартная)</option>
+                                <option value="v2">V2 (Улучшенная)</option>
+                            </select>
+                        </div>
                         <div class="option-item">
                             <input type="checkbox" id="customPrompt" name="customPrompt">
                             <label for="customPrompt">Использовать свой промпт</label>
@@ -1371,6 +1378,7 @@ SINGLE_TEMPLATE = '''
             formData.append('debug', document.getElementById('debugMode').checked);
             formData.append('customPrompt', document.getElementById('customPrompt').checked);
             formData.append('customPromptText', document.getElementById('customPromptText').value);
+            formData.append('loraVersion', document.getElementById('loraVersion').value);
             
             try {
                 // Start processing
@@ -1638,6 +1646,7 @@ def process_single():
         debug = request.form.get('debug') == 'true'
         custom_prompt = request.form.get('customPrompt') == 'true'
         custom_prompt_text = request.form.get('customPromptText', '').strip()
+        lora_version = request.form.get('loraVersion', 'v1')
         
         if not file:
             return jsonify({'error': 'No file provided'}), 400
