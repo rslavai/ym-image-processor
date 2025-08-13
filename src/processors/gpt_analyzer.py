@@ -88,35 +88,26 @@ Rules:
             img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
             
             # Prepare the request using new OpenAI Responses API format
+            # Note: System prompt is combined with user request in single input
+            combined_prompt = f"{self.system_prompt}\n\nAnalyze this product image and return the structured JSON response."
+            
             payload = {
-                "model": "gpt-4.1-mini",
+                "model": "gpt-4.1",
                 "input": [
-                    {
-                        "role": "system",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": self.system_prompt
-                            }
-                        ]
-                    },
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "input_text",
-                                "text": "Analyze this product image and return the structured JSON response."
+                                "text": combined_prompt
                             },
                             {
                                 "type": "input_image",
-                                "image_url": f"data:image/png;base64,{img_base64}",
-                                "detail": "high"
+                                "image_url": f"data:image/png;base64,{img_base64}"
                             }
                         ]
                     }
-                ],
-                "max_tokens": 1000,
-                "temperature": 0.2
+                ]
             }
             
             # Make the API call
@@ -161,15 +152,26 @@ Rules:
                 }
                 
             else:
+                # Detailed error handling for debugging
+                try:
+                    error_response = response.json()
+                except:
+                    error_response = {"message": response.text}
+                
                 error_detail = ""
-                if response.status_code == 429:
-                    error_detail = " (Rate limit exceeded or insufficient quota)"
+                if response.status_code == 400:
+                    error_detail = f" (Bad Request - possibly invalid model or format): {error_response}"
+                elif response.status_code == 429:
+                    error_detail = f" (Rate limit exceeded): {error_response}"
                 elif response.status_code == 401:
-                    error_detail = " (Invalid API key)"
+                    error_detail = f" (Invalid API key): {error_response}"
                 elif response.status_code == 404:
-                    error_detail = " (Model not found)"
+                    error_detail = f" (Model/endpoint not found): {error_response}"
+                else:
+                    error_detail = f" (Unknown error): {error_response}"
                     
-                print(f"GPT-4 Vision API error: {response.status_code}{error_detail} - {response.text}")
+                print(f"OpenAI Responses API error: {response.status_code}{error_detail}")
+                print(f"Payload sent: {payload}")
                 return {
                     'success': False,
                     'error': f"API error: {response.status_code}{error_detail}",
