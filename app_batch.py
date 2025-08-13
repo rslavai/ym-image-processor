@@ -27,6 +27,7 @@ batch_processor = BatchProcessor()
 
 # Progress tracking
 progress_data = {}
+single_progress_data = {}
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -685,53 +686,8 @@ def index():
 
 @app.route('/single')
 def single_mode():
-    """Redirect to single processing app"""
-    # For now, show message that single mode is integrated
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Single Mode</title>
-        <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <style>
-            body { 
-                font-family: 'Syne', sans-serif;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-                background: #f5f5f7;
-            }
-            .message {
-                text-align: center;
-                padding: 40px;
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            }
-            h2 { color: #1d1d1f; margin-bottom: 16px; }
-            p { color: #86868b; margin-bottom: 24px; }
-            a {
-                display: inline-block;
-                padding: 12px 32px;
-                background: #007aff;
-                color: white;
-                text-decoration: none;
-                border-radius: 100px;
-                font-weight: 500;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="message">
-            <h2>Одиночная обработка</h2>
-            <p>Для обработки одного изображения используйте пакетный режим<br>и загрузите только один файл</p>
-            <a href="/">Перейти к обработке</a>
-        </div>
-    </body>
-    </html>
-    '''
+    """Single image processing with detailed steps"""
+    return render_template_string(SINGLE_TEMPLATE)
 
 @app.route('/process_batch', methods=['POST'])
 def process_batch():
@@ -788,8 +744,7 @@ def process_files_background(file_data_list, batch_id, enhance, debug):
     files = [FileDataWrapper(file_data) for file_data in file_data_list]
     try:
         # Set debug mode if requested
-        if debug:
-            batch_processor.positioner.set_debug_mode(True)
+        batch_processor.positioner.set_debug_mode(debug)
         
         def progress_callback(data):
             progress_data[batch_id]['processed'] = data['processed']
@@ -822,7 +777,10 @@ def process_files_background(file_data_list, batch_id, enhance, debug):
         progress_data[batch_id]['successful'] = result['successful']
         progress_data[batch_id]['failed'] = result['failed']
         progress_data[batch_id]['zip_path'] = result['zip_path']
+        progress_data[batch_id]['batch_id'] = result['batch_id']  # Add batch_id to progress data
         progress_data[batch_id]['processing_time'] = time.time() - int(batch_id.split('_')[1])
+        
+        print(f"Batch {batch_id} completed. ZIP path: {result['zip_path']}")  # Debug log
         
     except Exception as e:
         print(f"Error in background processing: {e}")
@@ -872,6 +830,666 @@ def history():
         return render_template_string(HISTORY_TEMPLATE, history=history_data)
     except Exception as e:
         return f"Error loading history: {str(e)}", 500
+
+# Single processing template
+SINGLE_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YM Single Processor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Syne', -apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif;
+            background: #ffffff;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        
+        h1 { 
+            font-size: 3rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+        
+        .subtitle {
+            color: #86868b;
+            font-size: 1.2rem;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 40px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            color: #86868b;
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .tab.active {
+            color: #1d1d1f;
+            border-bottom-color: #1d1d1f;
+        }
+        
+        .glass-card {
+            background: rgba(248, 248, 248, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.08),
+                inset 0 2px 1px rgba(255, 255, 255, 0.6);
+            padding: 48px;
+            margin-bottom: 32px;
+        }
+        
+        .upload-zone {
+            background: rgba(255, 255, 255, 0.5);
+            border: 2px dashed rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            margin-bottom: 32px;
+        }
+        
+        .upload-zone:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .upload-zone.dragover {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: #1d1d1f;
+            transform: scale(1.02);
+        }
+        
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            opacity: 0.3;
+        }
+        
+        input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-label {
+            display: inline-block;
+            padding: 14px 36px;
+            background: #1d1d1f;
+            color: white;
+            border-radius: 100px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .file-label:hover {
+            background: #000000;
+            transform: scale(1.05);
+        }
+        
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+        
+        .option-group {
+            background: rgba(255, 255, 255, 0.3);
+            padding: 24px;
+            border-radius: 16px;
+        }
+        
+        .option-group h3 {
+            color: #1d1d1f;
+            margin-bottom: 16px;
+            font-size: 1.1rem;
+        }
+        
+        .option-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .option-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .option-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+        }
+        
+        .option-item label {
+            color: #1d1d1f;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        
+        .prompt-area {
+            margin-top: 16px;
+        }
+        
+        .prompt-area textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+        
+        .prompt-area textarea:focus {
+            outline: none;
+            border-color: #1d1d1f;
+        }
+        
+        .process-btn {
+            background: #1d1d1f;
+            color: #ffffff;
+            padding: 16px 48px;
+            border: none;
+            cursor: pointer;
+            border-radius: 100px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: -0.01em;
+            width: 100%;
+        }
+        
+        .process-btn:hover {
+            background: #000000;
+            transform: scale(1.02);
+        }
+        
+        .process-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .processing-section {
+            display: none;
+            margin-top: 48px;
+        }
+        
+        .processing-section.active {
+            display: block;
+        }
+        
+        .step-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+        
+        .step-card {
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .step-card.active {
+            border-color: #1d1d1f;
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .step-card.completed {
+            border-color: #34c759;
+            background: rgba(52, 199, 89, 0.1);
+        }
+        
+        .step-card.error {
+            border-color: #ff3b30;
+            background: rgba(255, 59, 48, 0.1);
+        }
+        
+        .step-title {
+            color: #1d1d1f;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .step-image {
+            width: 100%;
+            max-width: 200px;
+            height: 200px;
+            border-radius: 12px;
+            object-fit: cover;
+            background: #f5f5f7;
+            margin-bottom: 16px;
+        }
+        
+        .step-status {
+            font-size: 0.9rem;
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-weight: 500;
+        }
+        
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-processing {
+            background: #cce5ff;
+            color: #004085;
+        }
+        
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .analysis-data {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+            text-align: left;
+            font-size: 0.8rem;
+            color: #666;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        
+        .download-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            justify-content: center;
+        }
+        
+        .download-btn {
+            padding: 8px 16px;
+            background: #34c759;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .download-btn:hover {
+            background: #30b350;
+            transform: scale(1.05);
+        }
+        
+        .download-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>YM Single Processor</h1>
+            <p class="subtitle">Детальная обработка одного изображения с показом всех этапов</p>
+        </div>
+        
+        <div class="tabs">
+            <a href="/single" class="tab active">Одиночная обработка</a>
+            <a href="/" class="tab">Пакетная обработка</a>
+            <a href="/history" class="tab">История</a>
+        </div>
+        
+        <div class="glass-card">
+            <form id="singleForm" enctype="multipart/form-data">
+                <div class="upload-zone" id="uploadZone">
+                    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <input type="file" id="fileInput" accept="image/*">
+                    <label for="fileInput" class="file-label">Выберите изображение</label>
+                    <p style="margin-top: 16px; color: #86868b;">или перетащите файл сюда</p>
+                </div>
+                
+                <div class="options">
+                    <div class="option-group">
+                        <h3>Опции обработки</h3>
+                        <div class="option-item">
+                            <input type="checkbox" id="enhanceImages" name="enhance">
+                            <label for="enhanceImages">Умная обработка</label>
+                        </div>
+                        <div class="option-item">
+                            <input type="checkbox" id="debugMode" name="debug">
+                            <label for="debugMode">Режим отладки</label>
+                        </div>
+                    </div>
+                    
+                    <div class="option-group">
+                        <h3>Промпт для LoRA</h3>
+                        <div class="option-item">
+                            <input type="checkbox" id="customPrompt" name="customPrompt">
+                            <label for="customPrompt">Использовать свой промпт</label>
+                        </div>
+                        <div class="prompt-area" id="promptArea" style="display: none;">
+                            <textarea id="customPromptText" placeholder="Введите свой промпт для LoRA модели. Если оставить пустым, будет использован промпт по умолчанию."></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="process-btn" id="processBtn" disabled>
+                    Обработать изображение
+                </button>
+            </form>
+        </div>
+        
+        <div class="processing-section" id="processingSection">
+            <div class="glass-card">
+                <h2 style="text-align: center; margin-bottom: 32px;">Этапы обработки</h2>
+                
+                <div class="step-container">
+                    <div class="step-card" id="step-original">
+                        <h3 class="step-title">1. Оригинальное изображение</h3>
+                        <img class="step-image" id="img-original" src="" alt="Оригинал">
+                        <div class="step-status status-pending" id="status-original">Загрузка...</div>
+                        <div class="download-buttons">
+                            <a href="#" class="download-btn" id="download-original" style="display: none;">Скачать</a>
+                        </div>
+                    </div>
+                    
+                    <div class="step-card" id="step-analysis">
+                        <h3 class="step-title">2. GPT-4 Анализ</h3>
+                        <div style="display: flex; flex-direction: column; align-items: center; height: 200px; justify-content: center;">
+                            <div style="font-size: 2rem;">🤖</div>
+                            <div style="margin-top: 12px;">AI анализ продукта</div>
+                        </div>
+                        <div class="step-status status-pending" id="status-analysis">Ожидание</div>
+                        <div class="analysis-data" id="analysis-data" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="step-card" id="step-background">
+                        <h3 class="step-title">3. Удаление фона</h3>
+                        <img class="step-image" id="img-background" src="" alt="Без фона">
+                        <div class="step-status status-pending" id="status-background">Ожидание</div>
+                        <div class="download-buttons">
+                            <a href="#" class="download-btn" id="download-background" style="display: none;">Скачать</a>
+                        </div>
+                    </div>
+                    
+                    <div class="step-card" id="step-final">
+                        <h3 class="step-title">4. Финальный результат</h3>
+                        <img class="step-image" id="img-final" src="" alt="Результат">
+                        <div class="step-status status-pending" id="status-final">Ожидание</div>
+                        <div class="download-buttons">
+                            <a href="#" class="download-btn" id="download-final" style="display: none;">Скачать</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 32px;">
+                    <div id="promptUsed" style="background: rgba(0,0,0,0.05); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 0.9rem; text-align: left; display: none;">
+                        <strong>Промпт, отправленный в LoRA:</strong><br>
+                        <span id="promptText"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let selectedFile = null;
+        let currentProcessingId = null;
+        
+        // DOM elements
+        const fileInput = document.getElementById('fileInput');
+        const uploadZone = document.getElementById('uploadZone');
+        const processBtn = document.getElementById('processBtn');
+        const customPromptCheck = document.getElementById('customPrompt');
+        const promptArea = document.getElementById('promptArea');
+        const processingSection = document.getElementById('processingSection');
+        
+        // File handling
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        // Custom prompt toggle
+        customPromptCheck.addEventListener('change', function() {
+            promptArea.style.display = this.checked ? 'block' : 'none';
+        });
+        
+        // Drag and drop
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+        
+        uploadZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+        });
+        
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                selectedFile = files[0];
+                updateFileDisplay();
+            }
+        });
+        
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                selectedFile = file;
+                updateFileDisplay();
+            }
+        }
+        
+        function updateFileDisplay() {
+            if (selectedFile) {
+                const fileName = selectedFile.name;
+                uploadZone.innerHTML = `
+                    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p style="color: #1d1d1f; font-weight: 500; margin-top: 12px;">${fileName}</p>
+                    <p style="color: #86868b; font-size: 0.9rem; margin-top: 8px;">Нажмите для выбора другого файла</p>
+                `;
+                processBtn.disabled = false;
+            }
+        }
+        
+        // Form submission
+        document.getElementById('singleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!selectedFile) {
+                alert('Выберите изображение для обработки');
+                return;
+            }
+            
+            processBtn.disabled = true;
+            processingSection.classList.add('active');
+            
+            // Show original image
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('img-original').src = e.target.result;
+                setStepStatus('original', 'completed', 'Загружено');
+                document.getElementById('step-original').classList.add('completed');
+            };
+            reader.readAsDataURL(selectedFile);
+            
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('enhance', document.getElementById('enhanceImages').checked);
+            formData.append('debug', document.getElementById('debugMode').checked);
+            formData.append('customPrompt', document.getElementById('customPrompt').checked);
+            formData.append('customPromptText', document.getElementById('customPromptText').value);
+            
+            try {
+                // Start processing
+                setStepStatus('analysis', 'processing', 'Анализ...');
+                document.getElementById('step-analysis').classList.add('active');
+                
+                const response = await fetch('/process_single', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    currentProcessingId = result.processing_id;
+                    
+                    // Poll for results
+                    pollSingleProgress(result.processing_id);
+                } else {
+                    throw new Error('Processing failed');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка при обработке изображения');
+                processBtn.disabled = false;
+            }
+        });
+        
+        async function pollSingleProgress(processingId) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/single_progress/${processingId}`);
+                    const data = await response.json();
+                    
+                    updateSingleProgress(data);
+                    
+                    if (data.completed) {
+                        clearInterval(interval);
+                        processBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error polling progress:', error);
+                    clearInterval(interval);
+                    processBtn.disabled = false;
+                }
+            }, 1000);
+        }
+        
+        function updateSingleProgress(data) {
+            // Update analysis step
+            if (data.analysis_completed) {
+                setStepStatus('analysis', 'completed', 'Завершен');
+                document.getElementById('step-analysis').classList.remove('active');
+                document.getElementById('step-analysis').classList.add('completed');
+                
+                if (data.analysis_data) {
+                    document.getElementById('analysis-data').textContent = JSON.stringify(data.analysis_data, null, 2);
+                    document.getElementById('analysis-data').style.display = 'block';
+                }
+                
+                // Show used prompt
+                if (data.prompt_used) {
+                    document.getElementById('promptUsed').style.display = 'block';
+                    document.getElementById('promptText').textContent = data.prompt_used;
+                }
+            }
+            
+            // Update background removal step
+            if (data.background_processing) {
+                setStepStatus('background', 'processing', 'Удаление фона...');
+                document.getElementById('step-background').classList.add('active');
+            }
+            
+            if (data.background_completed) {
+                setStepStatus('background', 'completed', 'Завершено');
+                document.getElementById('step-background').classList.remove('active');
+                document.getElementById('step-background').classList.add('completed');
+                
+                if (data.background_image_url) {
+                    document.getElementById('img-background').src = data.background_image_url;
+                    document.getElementById('download-background').href = data.background_image_url;
+                    document.getElementById('download-background').style.display = 'inline-block';
+                }
+            }
+            
+            // Update final step
+            if (data.final_processing) {
+                setStepStatus('final', 'processing', 'Финализация...');
+                document.getElementById('step-final').classList.add('active');
+            }
+            
+            if (data.final_completed) {
+                setStepStatus('final', 'completed', 'Готово!');
+                document.getElementById('step-final').classList.remove('active');
+                document.getElementById('step-final').classList.add('completed');
+                
+                if (data.final_image_url) {
+                    document.getElementById('img-final').src = data.final_image_url;
+                    document.getElementById('download-final').href = data.final_image_url;
+                    document.getElementById('download-final').style.display = 'inline-block';
+                }
+            }
+            
+            // Handle errors
+            if (data.error) {
+                const currentStep = data.current_step || 'analysis';
+                setStepStatus(currentStep, 'error', `Ошибка: ${data.error}`);
+                document.getElementById(`step-${currentStep}`).classList.add('error');
+                document.getElementById(`step-${currentStep}`).classList.remove('active');
+            }
+        }
+        
+        function setStepStatus(step, status, text) {
+            const statusEl = document.getElementById(`status-${step}`);
+            statusEl.className = `step-status status-${status}`;
+            statusEl.textContent = text;
+        }
+    </script>
+</body>
+</html>
+'''
 
 # History template for batch history
 HISTORY_TEMPLATE = '''
@@ -1009,6 +1627,156 @@ HISTORY_TEMPLATE = '''
 </body>
 </html>
 '''
+
+@app.route('/process_single', methods=['POST'])
+def process_single():
+    """Process single image with detailed steps"""
+    try:
+        file = request.files.get('file')
+        enhance = request.form.get('enhance') == 'true'
+        debug = request.form.get('debug') == 'true'
+        custom_prompt = request.form.get('customPrompt') == 'true'
+        custom_prompt_text = request.form.get('customPromptText', '').strip()
+        
+        if not file:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        # Generate processing ID
+        processing_id = f"single_{int(time.time())}"
+        single_progress_data[processing_id] = {
+            'processing_id': processing_id,
+            'current_step': 'analysis',
+            'analysis_completed': False,
+            'background_processing': False,
+            'background_completed': False,
+            'final_processing': False,
+            'final_completed': False,
+            'completed': False,
+            'error': None
+        }
+        
+        # Read file content
+        file_content = file.stream.read()
+        file_data = {
+            'filename': file.filename,
+            'content': file_content,
+            'content_type': file.content_type
+        }
+        
+        # Start processing in background thread
+        thread = threading.Thread(
+            target=process_single_background,
+            args=(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text)
+        )
+        thread.start()
+        
+        return jsonify({'processing_id': processing_id})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/single_progress/<processing_id>')
+def get_single_progress(processing_id):
+    """Get single processing progress"""
+    if processing_id in single_progress_data:
+        return jsonify(single_progress_data[processing_id])
+    return jsonify({'error': 'Processing not found'}), 404
+
+@app.route('/single_image/<processing_id>/<step>')
+def get_single_image(processing_id, step):
+    """Get processed image from specific step"""
+    if processing_id not in single_progress_data:
+        return "Processing not found", 404
+    
+    # Image paths for different steps
+    image_path = f"processed/single_{processing_id}/{step}.png"
+    
+    if os.path.exists(image_path):
+        return send_file(image_path, mimetype='image/png')
+    
+    return "Image not found", 404
+
+def process_single_background(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text):
+    """Background processing for single image"""
+    try:
+        # Create processing directory
+        process_dir = Path(f"processed/single_{processing_id}")
+        process_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create file wrapper
+        file_wrapper = FileDataWrapper(file_data)
+        
+        # Set debug mode
+        batch_processor.positioner.set_debug_mode(debug)
+        
+        # Step 1: Save original
+        original_path = process_dir / "original.png"
+        image = Image.open(file_wrapper.stream).convert('RGBA')
+        image.save(original_path, 'PNG')
+        
+        # Step 2: GPT Analysis
+        single_progress_data[processing_id]['current_step'] = 'analysis'
+        analysis = batch_processor.gpt_analyzer.analyze_image(image)
+        single_progress_data[processing_id]['analysis_data'] = analysis
+        single_progress_data[processing_id]['analysis_completed'] = True
+        
+        # Determine prompt to use
+        if custom_prompt and custom_prompt_text:
+            prompt_to_use = custom_prompt_text
+        elif custom_prompt and not custom_prompt_text:
+            prompt_to_use = "Clean product photo: keep only the main item and its natural shadow on pure #FFFFFF background; remove any extra elements (text, frames, logos, graphics); keep original resolution, no upscaling."
+        else:
+            prompt_to_use = batch_processor.gpt_analyzer.create_lora_prompt(analysis)
+        
+        single_progress_data[processing_id]['prompt_used'] = prompt_to_use
+        
+        # Step 3: Background removal
+        single_progress_data[processing_id]['current_step'] = 'background'
+        single_progress_data[processing_id]['background_processing'] = True
+        
+        no_bg_image = batch_processor._remove_background_fal(image, prompt_to_use)
+        if no_bg_image:
+            no_bg_path = process_dir / "background.png"
+            no_bg_image.save(no_bg_path, 'PNG')
+            single_progress_data[processing_id]['background_image_url'] = f"/single_image/{processing_id}/background"
+        else:
+            raise Exception("Background removal failed")
+            
+        single_progress_data[processing_id]['background_processing'] = False
+        single_progress_data[processing_id]['background_completed'] = True
+        
+        # Step 4: Smart positioning (if enhance is enabled)
+        single_progress_data[processing_id]['current_step'] = 'final'
+        single_progress_data[processing_id]['final_processing'] = True
+        
+        if enhance:
+            # Apply smart positioning
+            canvas_settings = analysis.get('canvas_settings', {})
+            size = canvas_settings.get('size', '1600x1600')
+            positioning = canvas_settings.get('positioning', 'centered')
+            
+            width, height = map(int, size.split('x'))
+            final_image = batch_processor.positioner.position_on_canvas(
+                no_bg_image, 
+                (width, height), 
+                positioning
+            )
+        else:
+            final_image = no_bg_image
+        
+        # Save final image
+        final_path = process_dir / "final.png"
+        final_image.save(final_path, 'PNG')
+        single_progress_data[processing_id]['final_image_url'] = f"/single_image/{processing_id}/final"
+        
+        single_progress_data[processing_id]['final_processing'] = False
+        single_progress_data[processing_id]['final_completed'] = True
+        single_progress_data[processing_id]['completed'] = True
+        
+    except Exception as e:
+        print(f"Error in single processing: {e}")
+        single_progress_data[processing_id]['error'] = str(e)
+        single_progress_data[processing_id]['completed'] = True
 
 @app.route('/health')
 def health():
