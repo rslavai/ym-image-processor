@@ -1095,8 +1095,8 @@ SINGLE_TEMPLATE = '''
         
         .step-image {
             width: 100%;
-            max-width: 200px;
-            height: 200px;
+            max-width: 350px;
+            height: 350px;
             border-radius: 12px;
             object-fit: cover;
             background: #f5f5f7;
@@ -1243,7 +1243,7 @@ SINGLE_TEMPLATE = '''
                     
                     <div class="step-card" id="step-analysis">
                         <h3 class="step-title">2. GPT-4 Анализ</h3>
-                        <div style="display: flex; flex-direction: column; align-items: center; height: 200px; justify-content: center;">
+                        <div style="display: flex; flex-direction: column; align-items: center; height: 350px; justify-content: center;">
                             <div style="font-size: 2rem;">🤖</div>
                             <div style="margin-top: 12px;">AI анализ продукта</div>
                         </div>
