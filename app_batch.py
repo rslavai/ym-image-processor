@@ -753,10 +753,20 @@ def process_batch():
             'completed': False
         }
         
+        # Convert files to data before background processing
+        file_data = []
+        for file in files:
+            file_data.append({
+                'filename': file.filename,
+                'content': file.stream.read(),
+                'content_type': file.content_type
+            })
+            file.stream.seek(0)  # Reset for any other use
+        
         # Start processing in background thread
         thread = threading.Thread(
             target=process_files_background,
-            args=(files, batch_id, enhance, debug)
+            args=(file_data, batch_id, enhance, debug)
         )
         thread.start()
         
@@ -765,8 +775,17 @@ def process_batch():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def process_files_background(files, batch_id, enhance, debug):
+class FileDataWrapper:
+    """Wrapper to mimic Flask FileStorage for our file data"""
+    def __init__(self, file_data):
+        self.filename = file_data['filename']
+        self.content_type = file_data['content_type']
+        self.stream = io.BytesIO(file_data['content'])
+
+def process_files_background(file_data_list, batch_id, enhance, debug):
     """Background processing of files"""
+    # Convert file data back to file-like objects
+    files = [FileDataWrapper(file_data) for file_data in file_data_list]
     try:
         # Set debug mode if requested
         if debug:
