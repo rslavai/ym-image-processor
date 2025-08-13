@@ -52,6 +52,7 @@ class BatchProcessor:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
+        # Create processing_history table for individual files
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS processing_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,8 +80,115 @@ class BatchProcessor:
             )
         ''')
         
+        # Create batches table for batch summaries
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                total_files INTEGER NOT NULL,
+                successful INTEGER DEFAULT 0,
+                failed INTEGER DEFAULT 0,
+                zip_path TEXT,
+                processing_time REAL,
+                status TEXT DEFAULT 'processing'
+            )
+        ''')
+        
         conn.commit()
         conn.close()
+    
+    def _save_batch_to_database(self, batch_data: Dict[str, Any]):
+        """Save batch information to database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO batches 
+                (batch_id, total_files, successful, failed, zip_path, processing_time, status, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                batch_data['batch_id'],
+                batch_data['total_files'],
+                batch_data.get('successful', 0),
+                batch_data.get('failed', 0),
+                batch_data.get('zip_path'),
+                batch_data.get('processing_time'),
+                batch_data.get('status', 'completed'),
+                datetime.now().isoformat()
+            ))
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error saving batch to database: {e}")
+    
+    def get_batch_history(self, limit: int = 50) -> List[Dict]:
+        """Get batch processing history"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT batch_id, created_at, total_files, successful, failed, 
+                       zip_path, processing_time, status
+                FROM batches 
+                ORDER BY created_at DESC 
+                LIMIT ?
+            ''', (limit,))
+            
+            records = cursor.fetchall()
+            conn.close()
+            
+            return [{
+                'batch_id': record[0],
+                'created_at': record[1],
+                'total_files': record[2],
+                'successful': record[3],
+                'failed': record[4],
+                'zip_path': record[5],
+                'processing_time': record[6],
+                'status': record[7]
+            } for record in records]
+            
+        except Exception as e:
+            print(f"Error getting batch history: {e}")
+            return []
+    
+    def get_batch_by_id(self, batch_id: str) -> Optional[Dict]:
+        """Get batch information by ID"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT batch_id, created_at, total_files, successful, failed, 
+                       zip_path, processing_time, status
+                FROM batches 
+                WHERE batch_id = ?
+            ''', (batch_id,))
+            
+            record = cursor.fetchone()
+            conn.close()
+            
+            if record:
+                return {
+                    'batch_id': record[0],
+                    'created_at': record[1],
+                    'total_files': record[2],
+                    'successful': record[3],
+                    'failed': record[4],
+                    'zip_path': record[5],
+                    'processing_time': record[6],
+                    'status': record[7]
+                }
+            return None
+            
+        except Exception as e:
+            print(f"Error getting batch: {e}")
+            return None
     
     def process_batch(self, 
                      files: List[Any],
@@ -99,6 +207,14 @@ class BatchProcessor:
         """
         self.current_batch_id = f"batch_{int(time.time())}"
         self.progress_callback = progress_callback
+        
+        # Save initial batch to database
+        initial_batch_data = {
+            'batch_id': self.current_batch_id,
+            'total_files': len(files),
+            'status': 'processing'
+        }
+        self._save_batch_to_database(initial_batch_data)
         
         # Create batch directories
         batch_dir = Path(f"processed/{self.current_batch_id}")
@@ -149,7 +265,8 @@ class BatchProcessor:
         # Create ZIP archive
         zip_path = self._create_zip_archive(batch_dir, results)
         
-        return {
+        # Prepare result data
+        result_data = {
             'batch_id': self.current_batch_id,
             'total_files': total_files,
             'successful': len([r for r in results if r['status'] == 'success']),
@@ -157,6 +274,11 @@ class BatchProcessor:
             'results': results,
             'zip_path': zip_path
         }
+        
+        # Save batch to database
+        self._save_batch_to_database(result_data)
+        
+        return result_data
     
     def _process_single_image(self, file: Any, batch_dir: Path) -> Dict[str, Any]:
         """

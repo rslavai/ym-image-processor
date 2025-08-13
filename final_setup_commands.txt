@@ -1,0 +1,47 @@
+# Финальные команды для завершения настройки на сервере
+# Выполните эти команды после подключения: ssh root@103.136.69.249
+
+# 1. Установить pip
+apt-get install -y python3-pip
+
+# 2. Установить зависимости для webhook
+cd /opt/ym-image-processor
+pip3 install flask requests
+
+# 3. Создать systemd service для webhook
+cat > /etc/systemd/system/ym-webhook.service << 'EOF'
+[Unit]
+Description=YM Image Processor Webhook Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ym-image-processor
+Environment="WEBHOOK_SECRET=ym-deploy-secret-2024"
+ExecStart=/usr/bin/python3 /opt/ym-image-processor/webhook_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 4. Запустить webhook service
+systemctl daemon-reload
+systemctl enable ym-webhook
+systemctl start ym-webhook
+
+# 5. Открыть порт 9000
+ufw allow 9000/tcp
+
+# 6. Проверить статус
+systemctl status ym-webhook
+docker ps | grep ym-processor
+
+# 7. Тест webhook
+curl http://localhost:9000/health
+
+echo "✅ Настройка завершена!"
+echo "Application: http://103.136.69.249:8080"
+echo "Webhook: http://103.136.69.249:9000/webhook"

@@ -839,6 +839,7 @@ def get_progress(batch_id):
 @app.route('/download/<batch_id>')
 def download_results(batch_id):
     """Download ZIP archive of results"""
+    # First check in-memory progress data
     if batch_id in progress_data and progress_data[batch_id].get('completed'):
         zip_path = progress_data[batch_id].get('zip_path')
         if zip_path and os.path.exists(zip_path):
@@ -848,23 +849,36 @@ def download_results(batch_id):
                 download_name=f'{batch_id}_results.zip',
                 mimetype='application/zip'
             )
+    
+    # If not found in memory, check database
+    batch_info = batch_processor.get_batch_by_id(batch_id)
+    if batch_info and batch_info.get('zip_path'):
+        zip_path = batch_info['zip_path']
+        if os.path.exists(zip_path):
+            return send_file(
+                zip_path,
+                as_attachment=True,
+                download_name=f'{batch_id}_results.zip',
+                mimetype='application/zip'
+            )
+    
     return "File not found", 404
 
 @app.route('/history')
 def history():
     """View processing history"""
     try:
-        history_data = batch_processor.get_history(limit=100)
+        history_data = batch_processor.get_batch_history(limit=50)
         return render_template_string(HISTORY_TEMPLATE, history=history_data)
     except Exception as e:
         return f"Error loading history: {str(e)}", 500
 
-# History template (simplified for now)
+# History template for batch history
 HISTORY_TEMPLATE = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Processing History</title>
+    <title>История обработки</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { 
@@ -879,7 +893,9 @@ HISTORY_TEMPLATE = '''
             margin-bottom: 24px;
             color: #007aff;
             text-decoration: none;
+            font-weight: 500;
         }
+        .back-link:hover { color: #0056b3; }
         table {
             width: 100%;
             background: white;
@@ -888,48 +904,107 @@ HISTORY_TEMPLATE = '''
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
         th, td {
-            padding: 12px;
+            padding: 16px 12px;
             text-align: left;
             border-bottom: 1px solid #e5e5e5;
         }
         th {
             background: #f5f5f7;
             font-weight: 600;
+            color: #1d1d1f;
         }
-        .status-success { color: #34c759; }
+        .status-completed { color: #34c759; }
+        .status-processing { color: #007aff; }
         .status-error { color: #ff3b30; }
+        .download-btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #34c759;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .download-btn:hover { background: #30b350; }
+        .download-btn:disabled,
+        .download-btn.disabled {
+            background: #ccc;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .stats {
+            font-size: 14px;
+            color: #666;
+        }
+        .batch-id {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #86868b;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <a href="/" class="back-link">← Вернуться к обработке</a>
         <h1>История обработки</h1>
+        {% if history %}
         <table>
             <thead>
                 <tr>
                     <th>Batch ID</th>
-                    <th>Файл</th>
-                    <th>Категория</th>
-                    <th>Тип</th>
-                    <th>Ориентация</th>
+                    <th>Дата создания</th>
+                    <th>Файлов</th>
+                    <th>Успешно / Ошибок</th>
+                    <th>Время обработки</th>
                     <th>Статус</th>
-                    <th>Время</th>
+                    <th>Скачать</th>
                 </tr>
             </thead>
             <tbody>
-                {% for item in history %}
+                {% for batch in history %}
                 <tr>
-                    <td>{{ item.batch_id }}</td>
-                    <td>{{ item.filename }}</td>
-                    <td>{{ item.category or '-' }}</td>
-                    <td>{{ item.product_type or '-' }}</td>
-                    <td>{{ item.orientation or '-' }}</td>
-                    <td class="status-{{ item.status }}">{{ item.status }}</td>
-                    <td>{{ item.upload_time }}</td>
+                    <td class="batch-id">{{ batch.batch_id }}</td>
+                    <td>{{ batch.created_at[:16].replace('T', ' ') if batch.created_at else '-' }}</td>
+                    <td>{{ batch.total_files }}</td>
+                    <td class="stats">
+                        <span style="color: #34c759;">{{ batch.successful or 0 }}</span> / 
+                        <span style="color: #ff3b30;">{{ batch.failed or 0 }}</span>
+                    </td>
+                    <td>{{ '%.1f' % batch.processing_time if batch.processing_time else '-' }}с</td>
+                    <td class="status-{{ batch.status or 'unknown' }}">
+                        {% if batch.status == 'completed' %}
+                            Завершено
+                        {% elif batch.status == 'processing' %}
+                            Обработка
+                        {% else %}
+                            {{ batch.status }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if batch.zip_path and batch.status == 'completed' %}
+                            <a href="/download/{{ batch.batch_id }}" class="download-btn">
+                                Скачать ZIP
+                            </a>
+                        {% else %}
+                            <span class="download-btn disabled">Недоступно</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        {% else %}
+        <div class="empty-state">
+            <h3>Нет данных об обработке</h3>
+            <p>Когда вы обработаете изображения, результаты появятся здесь.</p>
+        </div>
+        {% endif %}
     </div>
 </body>
 </html>
