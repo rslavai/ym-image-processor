@@ -20,7 +20,7 @@ class GPTProductAnalyzer:
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
         
-        self.api_url = "https://api.openai.com/v1/chat/completions"
+        self.api_url = "https://api.openai.com/v1/responses"
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
@@ -87,33 +87,36 @@ Rules:
             image.save(buffered, format="PNG")
             img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
             
-            # Prepare the request
+            # Prepare the request using new OpenAI Responses API format
             payload = {
-                "model": "gpt-4o-mini",
-                "messages": [
+                "model": "gpt-4.1-mini",
+                "input": [
                     {
                         "role": "system",
-                        "content": self.system_prompt
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": self.system_prompt
+                            }
+                        ]
                     },
                     {
                         "role": "user",
                         "content": [
                             {
-                                "type": "text",
+                                "type": "input_text",
                                 "text": "Analyze this product image and return the structured JSON response."
                             },
                             {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{img_base64}",
-                                    "detail": "high"
-                                }
+                                "type": "input_image",
+                                "image_url": f"data:image/png;base64,{img_base64}",
+                                "detail": "high"
                             }
                         ]
                     }
                 ],
                 "max_tokens": 1000,
-                "temperature": 0.2  # Lower temperature for more consistent output
+                "temperature": 0.2
             }
             
             # Make the API call
@@ -126,7 +129,8 @@ Rules:
             
             if response.status_code == 200:
                 result = response.json()
-                content = result['choices'][0]['message']['content']
+                # New Responses API returns output_text instead of choices
+                content = result.get('output_text', '')
                 
                 # Extract JSON from response
                 # GPT might wrap it in ```json ... ``` markers
