@@ -185,7 +185,13 @@ class BatchProcessor:
                 # Convert RGBA to RGB for JPEG
                 rgb_image = Image.new('RGB', image.size, (255, 255, 255))
                 if image.mode == 'RGBA':
-                    rgb_image.paste(image, mask=image.split()[-1])
+                    # Handle transparency mask safely
+                    try:
+                        alpha = image.split()[-1]
+                        rgb_image.paste(image, mask=alpha)
+                    except:
+                        # Fallback: simple conversion without alpha
+                        rgb_image = image.convert('RGB')
                 else:
                     rgb_image = image.convert('RGB')
                 rgb_image.save(original_path, 'JPEG')
