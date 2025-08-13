@@ -175,7 +175,7 @@ class BatchProcessor:
         try:
             # Read file content first to avoid stream closing issues
             file_content = file.stream.read()
-            file.stream.seek(0)  # Reset stream position
+            # Don't try to seek after reading - stream might be closed
             
             # Save original
             original_path = batch_dir / "originals" / filename
