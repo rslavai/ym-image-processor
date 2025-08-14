@@ -9,12 +9,15 @@ import requests
 from flask import Flask, render_template_string, request, jsonify, send_file
 from PIL import Image
 import time
+from src.models.model_registry import ModelRegistry
 
 app = Flask(__name__)
+model_registry = ModelRegistry()
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max
 
 # API ключ из переменной окружения
-FAL_API_KEY = os.environ.get('FAL_API_KEY', '')
+# Support both FAL_KEY (official) and FAL_API_KEY (legacy)
+FAL_API_KEY = os.environ.get('FAL_KEY') or os.environ.get('FAL_API_KEY', '')
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -506,26 +509,35 @@ def process():
 def remove_background_fal(image):
     """
     Удаление фона через вашу натренированную LoRA модель на Fal.ai
-    Используем FLUX Kontext для умного редактирования
+    Используем FLUX Kontext для умного редактирования с правильным fal_client
     """
     try:
-        # Конвертируем изображение в base64
+        import fal_client
+        print("✅ fal_client импортирован успешно")
+        
+        # Проверяем переменные окружения
+        if not os.environ.get('FAL_KEY') and not os.environ.get('FAL_API_KEY'):
+            print("❌ Ни FAL_KEY, ни FAL_API_KEY не настроены в переменных окружения")
+            return None
+        
+        # Конвертируем изображение в base64 для отправки
         buffered = io.BytesIO()
         image.save(buffered, format="PNG")
         img_base64 = base64.b64encode(buffered.getvalue()).decode()
-        
-        # Подготавливаем запрос к Fal.ai
-        headers = {
-            "Authorization": f"Key {FAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
         
         # Получаем путь к вашей LoRA модели из переменных окружения
         lora_path = os.environ.get('LORA_PATH', 
             'https://v3.fal.media/files/rabbit/McQtMDl9HQ2cKh0_E-CrO_adapter_model.safetensors')
         
-        # Используем FLUX Kontext с вашей LoRA моделью
-        data = {
+        # Настройка для отладки прогресса
+        def on_queue_update(update):
+            if isinstance(update, fal_client.InProgress):
+                print(f"Processing: {len(update.logs)} logs received")
+                for log in update.logs:
+                    print(f"  {log.get('message', '')}")
+        
+        # Используем FLUX Kontext с вашей LoRA моделью через официальный клиент
+        arguments = {
             "image_url": f"data:image/png;base64,{img_base64}",
             "prompt": "remove background, place product on pure white background, keep shadows for realism, professional product photography",
             "num_inference_steps": 30,
@@ -541,50 +553,56 @@ def remove_background_fal(image):
             "resolution_mode": "match_input"
         }
         
-        # Отправляем запрос на обработку
-        response = requests.post(
-            "https://fal.run/fal-ai/flux-kontext-lora",
-            headers=headers,
-            json=data,
-            timeout=60
+        # Отправляем запрос с подпиской на обновления
+        print("🔄 Отправляем запрос к FLUX Kontext LoRA...")
+        result = fal_client.subscribe(
+            "fal-ai/flux-kontext-lora",
+            arguments=arguments,
+            with_logs=True,
+            on_queue_update=on_queue_update,
         )
         
-        if response.status_code == 200:
-            result = response.json()
-            # Получаем URL обработанного изображения
-            if 'images' in result and len(result['images']) > 0:
-                img_url = result['images'][0]['url']
-                # Загружаем результат
-                img_response = requests.get(img_url)
-                result_image = Image.open(io.BytesIO(img_response.content))
-                return result_image
+        # Обрабатываем результат
+        print(f"📋 Результат API: {type(result)}")
+        if result:
+            print(f"📋 Ключи в результате: {list(result.keys()) if isinstance(result, dict) else 'не dict'}")
         
-        print(f"API Error: {response.status_code} - {response.text}")
+        if result and 'images' in result and len(result['images']) > 0:
+            img_url = result['images'][0]['url']
+            # Загружаем результат
+            img_response = requests.get(img_url)
+            result_image = Image.open(io.BytesIO(img_response.content))
+            print("✅ Успешно обработано с FLUX Kontext LoRA")
+            return result_image
+        
+        print("❌ FLUX Kontext LoRA не вернул изображения")
         
         # Fallback на обычное удаление фона если LoRA не сработала
-        print("Trying fallback to BiRefNet...")
-        data_fallback = {
-            "image_url": f"data:image/png;base64,{img_base64}"
-        }
+        print("🔄 Пробуем fallback на BiRefNet...")
         
-        response = requests.post(
-            "https://fal.run/fal-ai/birefnet",
-            headers=headers,
-            json=data_fallback,
-            timeout=30
+        fallback_result = fal_client.subscribe(
+            "fal-ai/birefnet",
+            arguments={
+                "image_url": f"data:image/png;base64,{img_base64}"
+            },
+            with_logs=True,
+            on_queue_update=on_queue_update,
         )
         
-        if response.status_code == 200:
-            result = response.json()
-            if 'image' in result:
-                img_response = requests.get(result['image'])
-                result_image = Image.open(io.BytesIO(img_response.content))
-                return result_image
+        if fallback_result and 'image' in fallback_result:
+            img_response = requests.get(fallback_result['image']['url'])
+            result_image = Image.open(io.BytesIO(img_response.content))
+            print("✅ Успешно обработано с BiRefNet fallback")
+            return result_image
         
+        print("❌ И BiRefNet fallback не сработал")
         return None
         
+    except ImportError:
+        print("❌ fal_client не установлен. Устанавливаем...")
+        return None
     except Exception as e:
-        print(f"Error calling Fal.ai API: {e}")
+        print(f"❌ Ошибка при вызове Fal.ai API: {e}")
         return None
 
 @app.route('/health')
@@ -595,6 +613,42 @@ def health():
         'api_configured': bool(FAL_API_KEY),
         'service': 'ym-image-processor-api'
     })
+
+@app.route('/models', methods=['GET'])
+def get_models():
+    """Получить список всех моделей."""
+    try:
+        models = model_registry.get_all_models(active_only=True)
+        return jsonify({
+            'success': True,
+            'models': [model.to_dict() for model in models]
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/<model_id>', methods=['GET'])
+def get_model(model_id):
+    """Получить детальную информацию о модели."""
+    try:
+        model = model_registry.get_model_by_id(model_id)
+        if model:
+            return jsonify({
+                'success': True,
+                'model': model.to_dict()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Model {model_id} not found'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

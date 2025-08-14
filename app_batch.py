@@ -1210,13 +1210,16 @@ SINGLE_TEMPLATE = '''
                     </div>
                     
                     <div class="option-group">
-                        <h3>Настройки LoRA</h3>
+                        <h3>Выбор модели</h3>
                         <div class="option-item">
-                            <label for="loraVersion" style="margin-right: 12px; color: #1d1d1f;">Версия LoRA:</label>
-                            <select id="loraVersion" name="loraVersion" style="padding: 6px 12px; border: 1px solid #e5e5e5; border-radius: 6px; background: white;">
-                                <option value="v1">V1 (Стандартная)</option>
-                                <option value="v2">V2 (Улучшенная)</option>
+                            <label for="modelSelect" style="margin-right: 12px; color: #1d1d1f;">Модель:</label>
+                            <select id="modelSelect" name="modelId" style="padding: 8px 12px; border: 1px solid #e5e5e5; border-radius: 6px; background: white; min-width: 250px;">
+                                <option value="">Автовыбор (рекомендуется)</option>
                             </select>
+                        </div>
+                        <div id="modelInfo" class="model-info" style="margin-top: 16px; padding: 16px; background: rgba(255, 255, 255, 0.7); border-radius: 12px; display: none;">
+                            <h4 style="margin: 0 0 12px 0; color: #1d1d1f;">Информация о модели</h4>
+                            <div id="modelDetails" style="font-size: 0.9rem; color: #86868b;"></div>
                         </div>
                         <div class="option-item">
                             <input type="checkbox" id="customPrompt" name="customPrompt">
@@ -1280,7 +1283,7 @@ SINGLE_TEMPLATE = '''
                 <div style="text-align: center; margin-top: 32px;">
                     <div id="promptUsed" style="background: rgba(0,0,0,0.05); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 0.9rem; text-align: left; display: none;">
                         <div style="margin-bottom: 8px;">
-                            <strong>Версия LoRA:</strong> <span id="loraVersionText" style="background: #34c759; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;"></span>
+                            <strong>Модель:</strong> <span id="modelText" style="background: #34c759; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;"></span>
                         </div>
                         <strong>Промпт, отправленный в LoRA:</strong><br>
                         <span id="promptText"></span>
@@ -1293,6 +1296,7 @@ SINGLE_TEMPLATE = '''
     <script>
         let selectedFile = null;
         let currentProcessingId = null;
+        let modelsData = {};
         
         // DOM elements
         const fileInput = document.getElementById('fileInput');
@@ -1301,14 +1305,95 @@ SINGLE_TEMPLATE = '''
         const customPromptCheck = document.getElementById('customPrompt');
         const promptArea = document.getElementById('promptArea');
         const processingSection = document.getElementById('processingSection');
+        const modelSelect = document.getElementById('modelSelect');
+        const modelInfo = document.getElementById('modelInfo');
+        const modelDetails = document.getElementById('modelDetails');
         
         // File handling
         fileInput.addEventListener('change', handleFileSelect);
+        
+        // Load models on page load
+        loadModels();
+        
+        // Model selection handler
+        modelSelect.addEventListener('change', function() {
+            const selectedModelId = this.value;
+            if (selectedModelId && modelsData[selectedModelId]) {
+                showModelInfo(modelsData[selectedModelId]);
+            } else {
+                modelInfo.style.display = 'none';
+            }
+        });
         
         // Custom prompt toggle
         customPromptCheck.addEventListener('change', function() {
             promptArea.style.display = this.checked ? 'block' : 'none';
         });
+        
+        // Load models from API
+        async function loadModels() {
+            try {
+                const response = await fetch('/models');
+                const data = await response.json();
+                
+                if (data.success && data.models) {
+                    // Clear existing options except auto-select
+                    modelSelect.innerHTML = '<option value="">Автовыбор (рекомендуется)</option>';
+                    
+                    // Add models to select and store data
+                    data.models.forEach(model => {
+                        modelsData[model.id] = model;
+                        const option = document.createElement('option');
+                        option.value = model.id;
+                        option.textContent = `${model.name} ${model.version}`;
+                        modelSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading models:', error);
+            }
+        }
+        
+        // Show model information
+        function showModelInfo(model) {
+            let html = `
+                <p><strong>Описание:</strong> ${model.dataset_notes || 'Нет описания'}</p>
+            `;
+            
+            if (model.pros && model.pros.length > 0) {
+                html += '<p><strong>Преимущества:</strong></p><ul style="margin: 8px 0;">';
+                model.pros.forEach(pro => {
+                    html += `<li style="color: #34c759;">✓ ${pro}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            if (model.cons && model.cons.length > 0) {
+                html += '<p><strong>Ограничения:</strong></p><ul style="margin: 8px 0;">';
+                model.cons.forEach(con => {
+                    html += `<li style="color: #ff9500;">⚠ ${con}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            if (model.spec) {
+                html += '<p><strong>Технические характеристики:</strong></p>';
+                html += '<ul style="margin: 8px 0;">';
+                if (model.spec.guidance_scale) {
+                    html += `<li>Guidance Scale: ${model.spec.guidance_scale}</li>`;
+                }
+                if (model.spec.num_inference_steps) {
+                    html += `<li>Шаги обработки: ${model.spec.num_inference_steps}</li>`;
+                }
+                if (model.spec.memory_usage) {
+                    html += `<li>Потребление памяти: ${model.spec.memory_usage}</li>`;
+                }
+                html += '</ul>';
+            }
+            
+            modelDetails.innerHTML = html;
+            modelInfo.style.display = 'block';
+        }
         
         // Drag and drop
         uploadZone.addEventListener('dragover', (e) => {
@@ -1381,7 +1466,7 @@ SINGLE_TEMPLATE = '''
             formData.append('debug', document.getElementById('debugMode').checked);
             formData.append('customPrompt', document.getElementById('customPrompt').checked);
             formData.append('customPromptText', document.getElementById('customPromptText').value);
-            formData.append('loraVersion', document.getElementById('loraVersion').value);
+            formData.append('modelId', document.getElementById('modelSelect').value);
             
             try {
                 // Start processing
@@ -1446,18 +1531,28 @@ SINGLE_TEMPLATE = '''
                     document.getElementById('promptUsed').style.display = 'block';
                     document.getElementById('promptText').textContent = data.prompt_used;
                     
-                    // Show LoRA version
-                    if (data.lora_version) {
-                        const versionText = data.lora_version.toUpperCase();
-                        const versionElement = document.getElementById('loraVersionText');
-                        versionElement.textContent = versionText;
-                        
-                        // Different colors for different versions
-                        if (data.lora_version === 'v2') {
-                            versionElement.style.background = '#ff6b35';
+                    // Show selected model
+                    if (data.model_id) {
+                        const modelElement = document.getElementById('modelText');
+                        const model = modelsData[data.model_id];
+                        if (model) {
+                            modelElement.textContent = `${model.name} ${model.version}`;
+                            // Different colors based on model type
+                            if (model.id.includes('v2')) {
+                                modelElement.style.background = '#ff6b35';
+                            } else if (model.id.includes('birefnet')) {
+                                modelElement.style.background = '#007aff';
+                            } else {
+                                modelElement.style.background = '#34c759';
+                            }
                         } else {
-                            versionElement.style.background = '#34c759';
+                            modelElement.textContent = 'Автовыбор';
+                            modelElement.style.background = '#86868b';
                         }
+                    } else {
+                        const modelElement = document.getElementById('modelText');
+                        modelElement.textContent = 'Автовыбор';
+                        modelElement.style.background = '#86868b';
                     }
                 }
             }
@@ -1663,7 +1758,7 @@ def process_single():
         debug = request.form.get('debug') == 'true'
         custom_prompt = request.form.get('customPrompt') == 'true'
         custom_prompt_text = request.form.get('customPromptText', '').strip()
-        lora_version = request.form.get('loraVersion', 'v1')
+        model_id = request.form.get('modelId', None)
         
         if not file:
             return jsonify({'error': 'No file provided'}), 400
@@ -1693,7 +1788,7 @@ def process_single():
         # Start processing in background thread
         thread = threading.Thread(
             target=process_single_background,
-            args=(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text, lora_version)
+            args=(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text, model_id)
         )
         thread.start()
         
@@ -1723,7 +1818,7 @@ def get_single_image(processing_id, step):
     
     return "Image not found", 404
 
-def process_single_background(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text, lora_version='v1'):
+def process_single_background(file_data, processing_id, enhance, debug, custom_prompt, custom_prompt_text, model_id=None):
     """Background processing for single image"""
     try:
         # Create processing directory
@@ -1756,13 +1851,13 @@ def process_single_background(file_data, processing_id, enhance, debug, custom_p
             prompt_to_use = batch_processor.gpt_analyzer.create_lora_prompt(analysis)
         
         single_progress_data[processing_id]['prompt_used'] = prompt_to_use
-        single_progress_data[processing_id]['lora_version'] = lora_version
+        single_progress_data[processing_id]['model_id'] = model_id
         
         # Step 3: Background removal
         single_progress_data[processing_id]['current_step'] = 'background'
         single_progress_data[processing_id]['background_processing'] = True
         
-        no_bg_image = batch_processor._remove_background_fal_v2(image, prompt_to_use, lora_version)
+        no_bg_image = batch_processor._remove_background_fal_v2(image, prompt_to_use, model_id)
         if no_bg_image:
             no_bg_path = process_dir / "background.png"
             no_bg_image.save(no_bg_path, 'PNG')

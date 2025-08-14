@@ -19,6 +19,8 @@ from pathlib import Path
 
 from .gpt_analyzer import GPTProductAnalyzer
 from .smart_positioning import SmartPositioning
+from ..models.model_registry import ModelRegistry
+from ..models.selection_policy import ModelSelectionPolicy
 
 
 class BatchProcessor:
@@ -34,9 +36,14 @@ class BatchProcessor:
         self.db_path = db_path
         self.gpt_analyzer = GPTProductAnalyzer()
         self.positioner = SmartPositioning()
-        self.fal_api_key = os.environ.get('FAL_API_KEY', '')
+        # Support both FAL_KEY (official) and FAL_API_KEY (legacy) 
+        self.fal_api_key = os.environ.get('FAL_KEY') or os.environ.get('FAL_API_KEY', '')
         self.lora_path = os.environ.get('LORA_PATH', 
             'https://v3.fal.media/files/rabbit/McQtMDl9HQ2cKh0_E-CrO_adapter_model.safetensors')
+        
+        # Model registry and selection policy
+        self.model_registry = ModelRegistry()
+        self.selection_policy = ModelSelectionPolicy()
         
         # Initialize database
         self._init_database()
@@ -193,7 +200,8 @@ class BatchProcessor:
     def process_batch(self, 
                      files: List[Any],
                      progress_callback: Optional[Callable] = None,
-                     max_workers: int = 3) -> Dict[str, Any]:
+                     max_workers: int = 3,
+                     model_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process multiple images in batch
         
@@ -201,18 +209,21 @@ class BatchProcessor:
             files: List of file objects
             progress_callback: Function to call with progress updates
             max_workers: Number of parallel workers
+            model_id: Model ID to use for processing (if None, auto-select)
             
         Returns:
             Dict with batch results
         """
         self.current_batch_id = f"batch_{int(time.time())}"
         self.progress_callback = progress_callback
+        self.current_model_id = model_id  # Store model_id for processing
         
         # Save initial batch to database
         initial_batch_data = {
             'batch_id': self.current_batch_id,
             'total_files': len(files),
-            'status': 'processing'
+            'status': 'processing',
+            'model_id': model_id
         }
         self._save_batch_to_database(initial_batch_data)
         
@@ -415,14 +426,15 @@ class BatchProcessor:
                 'processing_time': time.time() - start_time
             }
     
-    def _remove_background_fal_v2(self, image: Image.Image, prompt: str, lora_version: str = 'v1') -> Optional[Image.Image]:
+    def _remove_background_fal_v2(self, image: Image.Image, prompt: str, model_id: Optional[str] = None) -> Optional[Image.Image]:
         """
-        Remove background using Fal.ai API with LoRA model (supports V1/V2)
+        Remove background using Fal.ai API with LoRA model
+        Uses model registry and selection policy for model selection
         
         Args:
             image: Input image
             prompt: Optimized prompt from GPT
-            lora_version: LoRA version ('v1' or 'v2')
+            model_id: Model ID to use (if None, uses selection policy)
             
         Returns:
             Image with removed background or None if failed
@@ -432,34 +444,82 @@ class BatchProcessor:
             return None
         
         try:
+            import fal_client
+            
+            # Проверяем переменные окружения
+            if not os.environ.get('FAL_KEY') and not os.environ.get('FAL_API_KEY'):
+                print("❌ Ни FAL_KEY, ни FAL_API_KEY не настроены в переменных окружения")
+                return self._remove_background_birefnet(image)
+            
+            # Select model using policy or provided model_id
+            if model_id:
+                model_info = self.model_registry.get_model_by_id(model_id)
+                if not model_info:
+                    print(f"❌ Модель {model_id} не найдена, используем автовыбор")
+                    selected_model, reason = self.selection_policy.select_model()
+                else:
+                    selected_model = model_info
+                    reason = f"Specified by user: {model_id}"
+            else:
+                # Use current_model_id if set (from batch processing)
+                if hasattr(self, 'current_model_id') and self.current_model_id:
+                    model_info = self.model_registry.get_model_by_id(self.current_model_id)
+                    if model_info:
+                        selected_model = model_info
+                        reason = f"Batch model: {self.current_model_id}"
+                    else:
+                        selected_model, reason = self.selection_policy.select_model()
+                else:
+                    selected_model, reason = self.selection_policy.select_model()
+            
+            print(f"✅ Выбрана модель: {selected_model.name} {selected_model.version}")
+            print(f"   Причина: {reason}")
+            
             # Convert image to base64
             buffered = io.BytesIO()
             image.save(buffered, format="PNG")
             img_base64 = base64.b64encode(buffered.getvalue()).decode()
             
-            # Prepare API request
-            headers = {
-                "Authorization": f"Key {self.fal_api_key}",
-                "Content-Type": "application/json"
-            }
+            # Get model spec
+            model_spec = selected_model.spec
             
-            # Configure settings based on LoRA version
-            if lora_version == 'v2':
-                # LoRA V2 settings from config
-                lora_path = "https://v3.fal.media/files/zebra/KoeQj8N4bU6OGnPT2VABy_adapter_model.safetensors"
-                inference_steps = 1000
-                guidance_scale = 0.0001  # learning_rate from config
-                # Use improved prompt from V2 config if no custom prompt
-                if not prompt or prompt.strip() == "":
+            # Configure settings from model spec
+            if selected_model.id == 'birefnet-fallback':
+                # Use BiRefNet fallback
+                return self._remove_background_birefnet(image)
+            
+            # For LoRA models
+            guidance_scale = model_spec.guidance_scale
+            inference_steps = model_spec.num_inference_steps
+            
+            # Use default prompt if not provided
+            if not prompt or prompt.strip() == "":
+                if selected_model.version == 'v2':
                     prompt = "Isolate the main product from the original image. Remove all text, graphics, watermarks, and extra objects. Replace the background with a pure white background. Keep product colors, proportions, and details. Add a soft realistic shadow for a natural catalog look."
-            else:
-                # LoRA V1 (original) settings
-                lora_path = self.lora_path
-                inference_steps = 30
-                guidance_scale = 2.5
+                else:
+                    prompt = "remove background, place product on pure white background, keep shadows for realism, professional product photography"
             
-            # Use FLUX Kontext with LoRA
-            data = {
+            print(f"🔧 Конфигурация {selected_model.name} {selected_model.version}:")
+            print(f"   Endpoint: {selected_model.endpoint}")
+            print(f"   Шаги: {inference_steps}")
+            print(f"   Guidance Scale: {guidance_scale}")
+            print(f"   Промпт: {prompt[:50]}...")
+            
+            # Get LoRA path from endpoint or environment
+            if selected_model.version == 'v2':
+                lora_path = "https://v3.fal.media/files/zebra/KoeQj8N4bU6OGnPT2VABy_adapter_model.safetensors"
+            else:
+                lora_path = self.lora_path
+            
+            # Progress callback for debugging
+            def on_queue_update(update):
+                if isinstance(update, fal_client.InProgress):
+                    print(f"🔄 Processing {selected_model.name} {selected_model.version}: {len(update.logs)} logs")
+                    for log in update.logs[-2:]:  # Show last 2 logs only
+                        print(f"  {log.get('message', '')}")
+            
+            # Use FLUX Kontext with LoRA via official client
+            arguments = {
                 "image_url": f"data:image/png;base64,{img_base64}",
                 "prompt": prompt,
                 "num_inference_steps": inference_steps,
@@ -475,40 +535,64 @@ class BatchProcessor:
                 "resolution_mode": "match_input"
             }
             
-            # Make API call
-            response = requests.post(
-                "https://fal.run/fal-ai/flux-kontext-lora",
-                headers=headers,
-                json=data,
-                timeout=60
-            )
+            # Make API call with proper subscription handling
+            print(f"🔄 Отправляем запрос к FLUX Kontext LoRA {lora_version}...")
+            print(f"📤 Аргументы API: {arguments}")
             
-            if response.status_code == 200:
-                result = response.json()
-                if 'images' in result and len(result['images']) > 0:
+            try:
+                result = fal_client.subscribe(
+                    "fal-ai/flux-kontext-lora",
+                    arguments=arguments,
+                    with_logs=True,
+                    on_queue_update=on_queue_update,
+                )
+                
+                print(f"📋 Результат API: {type(result)}")
+                if result:
+                    print(f"📋 Ключи в результате: {list(result.keys()) if isinstance(result, dict) else 'не dict'}")
+                
+                if result and 'images' in result and len(result['images']) > 0:
                     img_url = result['images'][0]['url']
+                    print(f"📥 Загружаем результат с {img_url[:50]}...")
                     img_response = requests.get(img_url)
-                    result_image = Image.open(io.BytesIO(img_response.content))
-                    return result_image
-            else:
-                print(f"LoRA API error: {response.status_code} - {response.text}")
+                    if img_response.status_code == 200:
+                        result_image = Image.open(io.BytesIO(img_response.content))
+                        print(f"✅ Успешно обработано с LoRA {lora_version}")
+                        return result_image
+                    else:
+                        print(f"❌ Ошибка загрузки изображения: {img_response.status_code}")
+                else:
+                    print(f"❌ LoRA {lora_version} не вернул изображения")
+                    if result:
+                        print(f"📋 Полный результат: {result}")
+                        
+            except Exception as api_error:
+                print(f"❌ Ошибка API запроса: {api_error}")
+                print(f"❌ Тип ошибки: {type(api_error)}")
+                if hasattr(api_error, 'response'):
+                    print(f"❌ HTTP статус: {api_error.response.status_code if api_error.response else 'нет'}")
+                    print(f"❌ HTTP тело: {api_error.response.text if api_error.response else 'нет'}")
             
             # Fallback to BiRefNet if LoRA fails
-            print(f"LoRA failed, trying BiRefNet fallback")
+            print(f"🔄 LoRA {lora_version} failed, trying BiRefNet fallback")
             return self._remove_background_birefnet(image)
             
+        except ImportError:
+            print("❌ fal_client не установлен")
+            return self._remove_background_birefnet(image)
         except Exception as e:
-            print(f"Error in LoRA background removal: {e}")
+            print(f"❌ Error in LoRA {lora_version} background removal: {e}")
             # Fallback to BiRefNet
             try:
                 return self._remove_background_birefnet(image)
             except Exception as fallback_error:
-                print(f"BiRefNet fallback also failed: {fallback_error}")
+                print(f"❌ BiRefNet fallback также провалился: {fallback_error}")
                 return None
 
     def _remove_background_fal(self, image: Image.Image, prompt: str) -> Optional[Image.Image]:
         """
         Remove background using Fal.ai API with LoRA model
+        Delegates to _remove_background_fal_v2 with model selection
         
         Args:
             image: Input image
@@ -517,80 +601,8 @@ class BatchProcessor:
         Returns:
             Image with removed background or None if failed
         """
-        if not self.fal_api_key:
-            print("FAL_API_KEY not configured")
-            return None
-        
-        try:
-            # Convert image to base64
-            buffered = io.BytesIO()
-            image.save(buffered, format="PNG")
-            img_base64 = base64.b64encode(buffered.getvalue()).decode()
-            
-            # Prepare API request
-            headers = {
-                "Authorization": f"Key {self.fal_api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            # Use FLUX Kontext with LoRA
-            data = {
-                "image_url": f"data:image/png;base64,{img_base64}",
-                "prompt": prompt,
-                "num_inference_steps": 30,
-                "guidance_scale": 2.5,
-                "output_format": "png",
-                "enable_safety_checker": False,
-                "loras": [
-                    {
-                        "path": self.lora_path,
-                        "scale": 1.0
-                    }
-                ],
-                "resolution_mode": "match_input"
-            }
-            
-            # Make API call
-            response = requests.post(
-                "https://fal.run/fal-ai/flux-kontext-lora",
-                headers=headers,
-                json=data,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'images' in result and len(result['images']) > 0:
-                    img_url = result['images'][0]['url']
-                    img_response = requests.get(img_url)
-                    result_image = Image.open(io.BytesIO(img_response.content))
-                    return result_image
-            
-            # Fallback to BiRefNet if LoRA fails
-            print(f"LoRA failed, trying BiRefNet fallback")
-            data_fallback = {
-                "image_url": f"data:image/png;base64,{img_base64}"
-            }
-            
-            response = requests.post(
-                "https://fal.run/fal-ai/birefnet",
-                headers=headers,
-                json=data_fallback,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'image' in result:
-                    img_response = requests.get(result['image'])
-                    result_image = Image.open(io.BytesIO(img_response.content))
-                    return result_image
-            
-            return None
-            
-        except Exception as e:
-            print(f"Error in Fal.ai API: {e}")
-            return None
+        # Use the new method with model selection
+        return self._remove_background_fal_v2(image, prompt)
     
     def _save_to_database(self, data: Dict[str, Any]):
         """Save processing record to database"""
@@ -696,3 +708,55 @@ class BatchProcessor:
         
         conn.close()
         return results
+    
+    def _remove_background_birefnet(self, image: Image.Image) -> Optional[Image.Image]:
+        """
+        Fallback background removal using BiRefNet API
+        
+        Args:
+            image: Input image
+            
+        Returns:
+            Image with removed background or None if failed
+        """
+        try:
+            import fal_client
+            print("🔄 Используем BiRefNet fallback...")
+            
+            # Convert image to base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            # Progress callback for debugging
+            def on_queue_update(update):
+                if isinstance(update, fal_client.InProgress):
+                    print(f"🔄 Processing BiRefNet: {len(update.logs)} logs")
+                    for log in update.logs[-1:]:  # Show last log only
+                        print(f"  {log.get('message', '')}")
+            
+            # Use BiRefNet for background removal
+            result = fal_client.subscribe(
+                "fal-ai/birefnet",
+                arguments={
+                    "image_url": f"data:image/png;base64,{img_base64}"
+                },
+                with_logs=True,
+                on_queue_update=on_queue_update,
+            )
+            
+            if result and 'image' in result:
+                img_response = requests.get(result['image']['url'])
+                result_image = Image.open(io.BytesIO(img_response.content))
+                print("✅ Успешно обработано с BiRefNet")
+                return result_image
+            else:
+                print("❌ BiRefNet также не смог обработать изображение")
+                return None
+                
+        except ImportError:
+            print("❌ fal_client не установлен для BiRefNet fallback")
+            return None
+        except Exception as e:
+            print(f"❌ Ошибка в BiRefNet fallback: {e}")
+            return None

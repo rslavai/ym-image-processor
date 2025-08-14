@@ -58,6 +58,9 @@ git pull origin main
 if [ ! -f ".env" ]; then
     print_status "Creating .env file..."
     cat > .env << 'EOF'
+# Официальный ключ для fal_client
+FAL_KEY=1b2d09e7-b561-4e66-b5df-c777ec28361f:c22376d251287771501f26cfdabf3ff5
+# Резервный ключ для совместимости
 FAL_API_KEY=1b2d09e7-b561-4e66-b5df-c777ec28361f:c22376d251287771501f26cfdabf3ff5
 LORA_PATH=https://v3.fal.media/files/rabbit/McQtMDl9HQ2cKh0_E-CrO_adapter_model.safetensors
 OPENAI_API_KEY=y1__xDajc-RpdT-ARiuKyDznuMCNDLvZ7L9s40pcN2X-QL3l1X-suw
