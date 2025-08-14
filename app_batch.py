@@ -1911,6 +1911,47 @@ def health():
         'fal_configured': bool(os.environ.get('FAL_API_KEY'))
     })
 
+# Model Registry API endpoints
+@app.route('/models', methods=['GET'])
+def get_models():
+    """Получить список всех моделей."""
+    try:
+        from src.models.model_registry import ModelRegistry
+        registry = ModelRegistry()
+        models = registry.get_all_models(active_only=True)
+        return jsonify({
+            'success': True,
+            'models': [model.to_dict() for model in models]
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/<model_id>', methods=['GET'])
+def get_model(model_id):
+    """Получить детальную информацию о модели."""
+    try:
+        from src.models.model_registry import ModelRegistry
+        registry = ModelRegistry()
+        model = registry.get_model_by_id(model_id)
+        if model:
+            return jsonify({
+                'success': True,
+                'model': model.to_dict()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Model {model_id} not found'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     # Create necessary directories
     os.makedirs('processed', exist_ok=True)
